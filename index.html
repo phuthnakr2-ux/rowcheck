@@ -31,25 +31,25 @@
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     
     /* PDF Report Layout - บังคับขนาด A4 หน้าเดียว */
-    #pdf-report-container { width: 794px; min-height: 1123px; padding: 25px 40px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
-    .pdf-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 5px; border: 1px solid #d8b4fe; border-radius: 8px; overflow: hidden; }
+    #pdf-report-container { width: 794px; min-height: 1123px; padding: 30px 40px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
+    .pdf-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 15px; border: 1px solid #d8b4fe; border-radius: 8px; overflow: hidden; }
     .pdf-table th, .pdf-table td { border-bottom: 1px solid #e9d5ff; border-right: 1px solid #e9d5ff; vertical-align: middle; text-align: center; }
     .pdf-table th:last-child, .pdf-table td:last-child { border-right: none; }
     .pdf-table tbody tr:last-child td { border-bottom: none; }
-    .pdf-table th { background: linear-gradient(135deg, #8b5cf6 0%, #c026d3 100%); color: white; font-weight: 700; font-size: 13px; padding: 4px 2px; }
+    .pdf-table th { background: linear-gradient(135deg, #8b5cf6 0%, #c026d3 100%); color: white; font-weight: 700; font-size: 14px; padding: 6px 4px; }
     .pdf-table tbody tr:nth-child(even) { background-color: #faf5ff; }
     .pdf-table tbody tr:nth-child(odd) { background-color: #ffffff; }
-    .text-left-pdf { text-align: left !important; padding-left: 8px !important; font-weight: 600; color: #4c1d95; }
+    .text-left-pdf { text-align: left !important; padding-left: 10px !important; font-weight: 600; color: #4c1d95; }
     
-    /* PDF Student ID Card Layout - หน้าละ 9 ใบ */
+    /* PDF Student ID Card Layout แนวนอน - หน้าละ 10 ใบ */
     .page-break { page-break-before: always; }
-    .pdf-page-chunk { width: 794px; height: 1123px; padding: 20px 30px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
+    .pdf-page-chunk { width: 794px; height: 1123px; padding: 25px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
     
-    .signature-pad { touch-action: none; background-color: white; border: 2px dashed #cbd5e1; border-radius: 12px; cursor: crosshair; }
-    .donut-chart { width: 120px; height: 120px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-    .donut-inner { width: 85px; height: 85px; background-color: white; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .donut-chart { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.2s; }
+    .donut-chart:hover { transform: scale(1.05); }
+    .donut-inner { width: 100px; height: 100px; background-color: white; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
     
-    #reader { width: 100%; border-radius: 16px; overflow: hidden; border: 2px solid #8b5cf6; }
+    #reader { width: 100%; border-radius: 16px; overflow: hidden; border: 3px solid #8b5cf6; }
     #reader video { object-fit: cover; }
   </style>
 </head>
@@ -60,7 +60,7 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     // ==========================================
-    // 🔗 ลิงก์ API หลังบ้านของคุณ (ฝังให้เรียบร้อยแล้ว)
+    // 🔗 ลิงก์ API หลังบ้านของคุณ (GAS)
     // ==========================================
     const GOOGLE_APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwVFk7ASZJ4KzyipPtBWl5fxrSZvpqj1EjrFcCJi3QD9mw48yBnlOxD_hgsjBXULzhaLg/exec"; 
 
@@ -76,7 +76,8 @@
         }
       }
     };
-    const playSound = (type) => {
+    const playSound = (type, soundEnabled = true) => {
+      if (!soundEnabled) return; // ถ้าปิดเสียงไว้ จะไม่ทำงาน
       try {
         if (!globalAudioContext) return;
         const ctx = globalAudioContext; if (ctx.state === 'suspended') ctx.resume();
@@ -115,16 +116,16 @@
         return <canvas ref={qrRef} className="rounded-lg shadow-sm border border-slate-100"></canvas>;
     };
 
-    const initialSettings = { roomName: "ม.1/1", teacherName: "", signerRole: "ครูที่ปรึกษา", signatureImg: "" };
+    const initialSettings = { roomName: "ม.1/1", soundEnabled: true }; // ลบผู้ตรวจและลายเซ็นออก
 
     function App() {
       const [activeTab, setActiveTab] = useState('check'); 
       const [toast, setToast] = useState('');
       const loadData = (key, fallback) => { try { const d = localStorage.getItem(key); return d ? JSON.parse(d) : fallback; } catch(e) { return fallback; } };
       
-      const [settings, setSettings] = useState(() => loadData('rc_pro_final_settings', initialSettings));
-      const [students, setStudents] = useState(() => loadData('rc_pro_final_students', []));
-      const [records, setRecords] = useState(() => loadData('rc_pro_final_records', []));
+      const [settings, setSettings] = useState(() => loadData('rc_pro_settings', initialSettings));
+      const [students, setStudents] = useState(() => loadData('rc_pro_students', []));
+      const [records, setRecords] = useState(() => loadData('rc_pro_records', []));
 
       const [checkMode, setCheckMode] = useState('manual');
       const [scannerActive, setScannerActive] = useState(false);
@@ -144,6 +145,7 @@
       const [exportFilter, setExportFilter] = useState('all'); 
       const [isExporting, setIsExporting] = useState(false);
       const [isGeneratingDoc, setIsGeneratingDoc] = useState('');
+      const [showChartDetails, setShowChartDetails] = useState(false); // Modal ดูกราฟ
 
       const [tempSettings, setTempSettings] = useState(settings);
       const [bulkIds, setBulkIds] = useState('');
@@ -154,10 +156,6 @@
       const [imageUploadingId, setImageUploadingId] = useState(null);
       const [selectedForPrint, setSelectedForPrint] = useState([]);
       const [selectedQRStudent, setSelectedQRStudent] = useState(null);
-      
-      const canvasRef = useRef(null);
-      const [isDrawing, setIsDrawing] = useState(false);
-      const [isSigLocked, setIsSigLocked] = useState(true);
 
       // --- Cloud Sync API ---
       const fetchInitialData = async () => {
@@ -167,7 +165,10 @@
               const res = await fetch(`${GOOGLE_APP_SCRIPT_URL}?action=getInitialData`);
               const json = await res.json();
               if(json && json.status === 'success') {
-                  if(Object.keys(json.settings).length > 0) { setSettings(json.settings); setTempSettings(json.settings); }
+                  if(json.settings && Object.keys(json.settings).length > 0) { 
+                      const mergedSettings = {...initialSettings, ...json.settings};
+                      setSettings(mergedSettings); setTempSettings(mergedSettings); 
+                  }
                   if(json.students && json.students.length > 0) setStudents(json.students);
                   if(json.records && json.records.length > 0) setRecords(json.records);
               }
@@ -187,13 +188,12 @@
           setIsSyncing(false);
       };
 
-      // โหลดครั้งแรก
       useEffect(() => { fetchInitialData(); }, []);
 
       useEffect(() => {
-          localStorage.setItem('rc_pro_final_settings', JSON.stringify(settings));
-          localStorage.setItem('rc_pro_final_students', JSON.stringify(students));
-          localStorage.setItem('rc_pro_final_records', JSON.stringify(records));
+          localStorage.setItem('rc_pro_settings', JSON.stringify(settings));
+          localStorage.setItem('rc_pro_students', JSON.stringify(students));
+          localStorage.setItem('rc_pro_records', JSON.stringify(records));
       }, [settings, students, records]);
 
       useEffect(() => {
@@ -226,8 +226,12 @@
       const startScanner = () => {
           if (!html5QrCodeRef.current) html5QrCodeRef.current = new Html5Qrcode("reader");
           if (!scannerActive) {
+              // ขยายกรอบสแกนให้ใหญ่ขึ้น
+              const screenWidth = window.innerWidth;
+              const qrboxSize = screenWidth > 500 ? 300 : 250;
+              
               html5QrCodeRef.current.start(
-                  { facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
+                  { facingMode: "environment" }, { fps: 10, qrbox: { width: qrboxSize, height: qrboxSize } },
                   (decodedText) => handleScanSuccess(decodedText),
                   (errorMessage) => { }
               ).then(() => setScannerActive(true)).catch(err => {
@@ -246,7 +250,13 @@
           if (isLocked) { showToast('ล็อคการเช็คชื่ออยู่ กรุณาปลดล็อค'); return; }
           const student = students.find(s => s.id === decodedText.trim()); 
           if (student) {
-              initAudio(); playSound('scan');
+              // เช็คว่าถ้ามาแล้ว ให้เงียบ ไม่ต้องดังซ้ำ
+              if (attendance[student.id] === 'present') {
+                  setLastScanned(student);
+                  setTimeout(() => setLastScanned(null), 2500);
+                  return;
+              }
+              initAudio(); playSound('scan', settings.soundEnabled);
               setAttendance(prev => ({ ...prev, [student.id]: 'present' }));
               setLastScanned(student);
               showToast(`สแกนสำเร็จ: ${student.name}`);
@@ -257,30 +267,23 @@
       // --- Check-in Functions ---
       const setStatusDirectly = (studentId, status) => {
           if (isLocked) return;
-          initAudio(); playSound('tap');
+          initAudio(); playSound('tap', settings.soundEnabled);
           setAttendance(prev => ({ ...prev, [studentId]: status }));
           if (status === 'present') {
               setTempNotes(prev => { const n = {...prev}; delete n[studentId]; return n; });
           }
       };
 
-      const saveIndividualNote = (studentId) => {
-          if (isLocked) return;
-          initAudio(); playSound('success');
-          setNotes(prev => ({ ...prev, [studentId]: tempNotes[studentId] }));
-          showToast('บันทึกหมายเหตุแล้ว 💾');
-      };
-
       const setAllStatus = (status) => {
           if (isLocked) return;
-          initAudio(); playSound('tap');
+          initAudio(); playSound('tap', settings.soundEnabled);
           const newAtt = { ...attendance };
           students.forEach(s => { if (!s.status || s.status === 'active') newAtt[s.id] = status; });
           setAttendance(newAtt);
       };
 
       const saveAttendance = () => {
-          initAudio(); playSound('success');
+          initAudio(); playSound('success', settings.soundEnabled);
           const newRecord = { id: generateId(), date: currentDate, timestamp: new Date().toISOString(), data: attendance, notes: tempNotes };
           const filteredRecords = records.filter(r => r.date !== currentDate);
           setRecords([...filteredRecords, newRecord]);
@@ -290,7 +293,7 @@
           showToast('บันทึกและล็อคข้อมูลเรียบร้อย! 🔒');
       };
 
-      const unlockAttendance = () => { initAudio(); playSound('unlock'); setIsLocked(false); showToast('ปลดล็อคแล้ว สามารถแก้ไขได้ 🔓'); };
+      const unlockAttendance = () => { initAudio(); playSound('tap', settings.soundEnabled); setIsLocked(false); showToast('ปลดล็อคแล้ว สามารถแก้ไขได้ 🔓'); };
 
       const currentSummary = useMemo(() => {
           let p = 0, a = 0, e = 0, totalActive = 0;
@@ -306,7 +309,7 @@
 
       // --- Stats & Report Functions ---
       const handleQuickDate = (mode) => {
-          initAudio(); playSound('tap'); setQuickDateMode(mode);
+          initAudio(); playSound('tap', settings.soundEnabled); setQuickDateMode(mode);
           const today = new Date(); let s = '', e = '';
           if (mode === 'today') { s = today.toISOString().split('T')[0]; e = s; } 
           else if (mode === 'week') {
@@ -322,8 +325,10 @@
 
       const reportDateList = useMemo(() => getDatesBetween(reportStartDate, reportEndDate), [reportStartDate, reportEndDate]);
       
+      const sortedStudents = useMemo(() => [...students].sort((a,b)=>a.number-b.number), [students]);
+
       const getStudentsForExport = () => {
-          let list = [...students].sort((a,b)=>a.number-b.number);
+          let list = [...sortedStudents];
           if (exportFilter === 'all') return list;
 
           list = list.filter(s => {
@@ -373,57 +378,22 @@
 
       const getIndividualStats = (studentId) => {
           let p = 0, a = 0, e = 0;
-          records.forEach(r => {
-              const st = r?.data?.[studentId];
-              if (st === 'present') p++;
-              if (st === 'absent') a++;
-              if (st === 'excused') e++;
+          reportDateList.forEach(date => {
+              const r = records.find(rec => rec.date === date);
+              if (r) {
+                  const st = r?.data?.[studentId];
+                  if (st === 'present') p++;
+                  if (st === 'absent') a++;
+                  if (st === 'excused') e++;
+              }
           });
           return { p, a, e };
       };
 
-      // --- Settings & Canvas ---
-      const getCanvasPos = (e, canvas) => {
-          const rect = canvas.getBoundingClientRect();
-          if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
-          return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      };
-      const startDrawing = (e) => {
-          if (isSigLocked) return;
-          setIsDrawing(true); const ctx = canvasRef.current.getContext('2d');
-          const pos = getCanvasPos(e.nativeEvent || e, canvasRef.current);
-          ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
-      };
-      const draw = (e) => {
-          if (!isDrawing || isSigLocked) return;
-          e.preventDefault(); 
-          const ctx = canvasRef.current.getContext('2d');
-          const pos = getCanvasPos(e.nativeEvent || e, canvasRef.current);
-          ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#4c1d95'; 
-          ctx.lineTo(pos.x, pos.y); ctx.stroke();
-      };
-      const stopDrawing = () => {
-          if (isDrawing && !isSigLocked) { setIsDrawing(false); setTempSettings({...tempSettings, signatureImg: canvasRef.current.toDataURL('image/png')}); }
-      };
-      const clearSignature = () => {
-          if (isSigLocked) return;
-          initAudio(); playSound('tap');
-          const canvas = canvasRef.current; canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-          setTempSettings({...tempSettings, signatureImg: ''});
-      };
-      useEffect(() => {
-          if (activeTab === 'settings' && canvasRef.current && tempSettings.signatureImg) {
-              const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
-              const img = new Image();
-              img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); };
-              img.src = tempSettings.signatureImg;
-          }
-      }, [activeTab]);
-
+      // --- Settings ---
       const saveSettings = () => {
-          initAudio(); playSound('success'); 
+          initAudio(); playSound('success', tempSettings.soundEnabled); 
           setSettings(tempSettings); 
-          setIsSigLocked(true); 
           syncDataToCloud('saveSettings', tempSettings);
           showToast('บันทึกการตั้งค่าแล้ว 💾');
       };
@@ -431,7 +401,7 @@
       const handleImageUpload = (e, studentId) => {
           const file = e.target.files[0];
           if(!file) return;
-          initAudio(); playSound('tap'); setImageUploadingId(studentId); 
+          initAudio(); playSound('tap', settings.soundEnabled); setImageUploadingId(studentId); 
           const reader = new FileReader();
           reader.onload = (event) => {
               const img = new Image();
@@ -443,10 +413,8 @@
                   canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
                   const base64Data = canvas.toDataURL('image/jpeg', 0.8);
                   
-                  // อัปเดต UI ชั่วคราวก่อนเผื่อเน็ตช้า
                   setStudents(prev => prev.map(s => s.id === studentId ? { ...s, image: base64Data } : s));
                   
-                  // ส่งขึ้น Drive ถ้ามี URL
                   if(GOOGLE_APP_SCRIPT_URL) {
                       try {
                           const res = await fetch(GOOGLE_APP_SCRIPT_URL, {
@@ -474,7 +442,7 @@
 
       const handleAddStudents = () => {
           if (!bulkNames.trim() && !bulkIds.trim()) { showToast('กรุณากรอกข้อมูลให้ครบถ้วน'); return; }
-          initAudio(); playSound('tap');
+          initAudio(); playSound('tap', settings.soundEnabled);
           
           const idsArray = bulkIds.split('\n').map(l => l.trim());
           const namesArray = bulkNames.split('\n').map(l => l.trim());
@@ -497,8 +465,13 @@
           showToast('เพิ่มรายชื่อสำเร็จ');
       };
 
+      const startEditStudent = (s) => {
+          initAudio(); playSound('tap', settings.soundEnabled);
+          setEditingStudentId(s.id); setEditStudentName(s.name); setEditStudentNumber(s.number);
+      }
+
       const saveEditStudent = (id) => {
-          initAudio(); playSound('success');
+          initAudio(); playSound('success', settings.soundEnabled);
           setStudents(prev => {
               const updated = prev.map(s => s.id === id ? { ...s, name: editStudentName, number: parseInt(editStudentNumber) || s.number } : s);
               syncDataToCloud('saveStudents', updated);
@@ -508,7 +481,7 @@
       };
 
       const deleteStudent = (s) => {
-          initAudio(); playSound('tap');
+          initAudio(); playSound('tap', settings.soundEnabled);
           if(window.confirm(`ยืนยันการลบ "${s.name}" อย่างถาวร?\n(ข้อมูลจะไม่สามารถกู้คืนได้)`)) {
               setStudents(prev => {
                   const updated = prev.filter(x => x.id !== s.id);
@@ -520,7 +493,7 @@
       };
 
       const updateStudentStatus = (id, newStatus) => {
-          initAudio(); playSound('tap');
+          initAudio(); playSound('tap', settings.soundEnabled);
           setStudents(prev => {
               const updated = prev.map(s => s.id === id ? { ...s, status: newStatus } : s);
               syncDataToCloud('saveStudents', updated);
@@ -532,7 +505,7 @@
       // --- Export Functions ---
       const exportExcel = () => {
           try {
-              initAudio(); playSound('tap'); setIsExporting(true);
+              initAudio(); playSound('tap', settings.soundEnabled); setIsExporting(true);
               const fileName = `รายงานเข้าแถว_${settings.roomName}.xlsx`;
               const formattedData = exportList.map(s => {
                   const rowData = { 'เลขที่': s.number, 'รหัสนักเรียน': s.id, 'ชื่อ-สกุล': s.name };
@@ -559,11 +532,10 @@
           } catch (err) { showToast('เกิดข้อผิดพลาด'); } finally { setIsExporting(false); }
       };
 
-      // คำนวณความสูงให้บีบอัดลง 1 หน้า (รองรับถึง 45 คน)
       const calculatePDFStyles = (studentCount) => {
-          if (studentCount > 35) return { padding: '2px 4px', fontSize: '11px', rowHeight: '18px' };
-          if (studentCount > 25) return { padding: '4px 4px', fontSize: '12px', rowHeight: '20px' };
-          return { padding: '5px 4px', fontSize: '13px', rowHeight: '24px' };
+          if (studentCount > 35) return { padding: '2px 4px', fontSize: '12px', rowHeight: '20px' };
+          if (studentCount > 25) return { padding: '4px 4px', fontSize: '13px', rowHeight: '22px' };
+          return { padding: '6px 4px', fontSize: '14px', rowHeight: '26px' };
       };
       const pdfStyles = calculatePDFStyles(exportList.length);
       const formattedRoomName = settings.roomName.replace(/ม\.?/g, '').trim();
@@ -572,13 +544,11 @@
           if (!arr || arr.length === 0) return [];
           return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
       };
-      const cardsToPrint = [...students].sort((a,b)=>a.number-b.number).filter(s => selectedForPrint.includes(s.id));
-      const cardChunks = chunkArray(cardsToPrint, 9); // แบ่งหน้าละ 9 ใบ
+      const cardsToPrint = sortedStudents.filter(s => selectedForPrint.includes(s.id));
+      const cardChunks = chunkArray(cardsToPrint, 10); // แบ่งหน้าละ 10 ใบ (แนวนอน 2 แถว 5 บรรทัด)
 
       const executeExport = async (type) => {
-          initAudio(); playSound('tap'); setIsExporting(true); setIsGeneratingDoc(type); 
-          
-          // ล็อคตำแหน่งแคปหน้าจอไว้บนสุดเสมอ แก้อาการดันขึ้นไปไม่สุด
+          initAudio(); playSound('tap', settings.soundEnabled); setIsExporting(true); setIsGeneratingDoc(type); 
           window.scrollTo(0, 0); 
           
           try {
@@ -633,6 +603,7 @@
                <div className="absolute top-[20%] right-[-10%] w-[300px] h-[300px] bg-violet-400 rounded-full mix-blend-multiply filter blur-[80px] opacity-20 animate-blob animation-delay-2000"></div>
            </div>
 
+           {/* Modal โหลดเอกสาร */}
            {isGeneratingDoc && (
             <div className="fixed inset-0 z-[99999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center">
               <i className="fas fa-spinner fa-spin text-violet-400 text-6xl mb-4 drop-shadow-[0_0_15px_rgba(167,139,250,0.5)]"></i>
@@ -640,30 +611,63 @@
             </div>
            )}
 
+           {/* Modal ดูบัตรเดี่ยวแนวนอน */}
            {selectedQRStudent && (
             <div className="fixed inset-0 z-[99999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
-                <div id="single-qr-card-content" className="bg-white rounded-[1.5rem] w-[260px] flex flex-col shadow-2xl overflow-hidden border border-slate-200 relative">
-                    <div className="bg-violet-600 py-3 text-center border-b-[3px] border-violet-800">
-                        <h2 className="text-white font-black text-xl tracking-wide">RowCheck</h2>
-                    </div>
-                    <div className="p-5 flex flex-col items-center bg-white">
-                        <div className="w-20 h-24 bg-slate-100 rounded-lg overflow-hidden border-2 border-slate-200 mb-3 flex items-center justify-center">
-                            {selectedQRStudent.image ? <img src={selectedQRStudent.image} className="w-full h-full object-cover" /> : <i className="fas fa-user text-slate-300 text-4xl"></i>}
+                <div id="single-qr-card-content" className="bg-white rounded-2xl w-[320px] shadow-2xl overflow-hidden border border-slate-200 relative flex flex-col">
+                    <div className="flex border-b-4 border-violet-500">
+                        <div className="w-1/3 bg-slate-100 flex-shrink-0 border-r border-slate-200 flex flex-col items-center justify-center pt-2">
+                            <div className="w-16 h-20 bg-white border border-slate-300 rounded-lg overflow-hidden flex items-center justify-center shadow-sm">
+                                {selectedQRStudent.image ? <img src={selectedQRStudent.image} className="w-full h-full object-cover" /> : <i className="fas fa-user text-slate-300 text-3xl"></i>}
+                            </div>
+                            <p className="bg-violet-600 text-white w-full text-center mt-2 py-1 text-[11px] font-bold tracking-wide">เลขที่ {selectedQRStudent.number}</p>
                         </div>
-                        <div className="mb-3 border border-slate-100 p-1.5 rounded-xl shadow-sm">
-                            <QRCodeCanvas text={selectedQRStudent.id} size={110} />
+                        <div className="w-2/3 p-4 flex flex-col justify-between bg-white relative">
+                            <div>
+                                <h3 className="font-black text-slate-800 text-[16px] leading-tight mb-1">{selectedQRStudent.name}</h3>
+                                <p className="text-slate-500 font-bold text-[11px]">รหัสประจำตัว: {selectedQRStudent.id}</p>
+                                <p className="text-violet-600 font-bold text-[11px] mt-0.5">ชั้น: {settings.roomName}</p>
+                            </div>
+                            <div className="absolute bottom-2 right-2 border border-slate-200 p-1 rounded-xl shadow-sm bg-white">
+                                <QRCodeCanvas text={selectedQRStudent.id} size={70} />
+                            </div>
                         </div>
-                        <h3 className="font-black text-slate-800 text-[16px] text-center mb-1 leading-tight">{selectedQRStudent.name}</h3>
-                        <p className="text-slate-500 font-bold text-[11px]">เลขที่ {selectedQRStudent.number} <span className="mx-1">|</span> รหัส {selectedQRStudent.id}</p>
                     </div>
-                    <div className="bg-violet-600 py-2 text-center">
-                        <p className="text-white text-[11px] font-bold">ห้อง : {settings.roomName}</p>
-                    </div>
-                    <button onClick={() => setSelectedQRStudent(null)} data-html2canvas-ignore="true" className="absolute top-2 right-2 w-8 h-8 bg-white/20 hover:bg-white/40 text-white rounded-full flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
+                    <button onClick={() => setSelectedQRStudent(null)} data-html2canvas-ignore="true" className="absolute top-2 right-2 w-7 h-7 bg-slate-200/50 hover:bg-slate-200 text-slate-600 rounded-full flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
                 </div>
                 <button onClick={() => executeExport('pdf_single_qr')} className="mt-6 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
-                    <i className="fas fa-download mr-2"></i> บันทึกบัตรลงเครื่อง
+                    <i className="fas fa-download mr-2"></i> บันทึกบัตรแนวนอน
                 </button>
+            </div>
+           )}
+
+           {/* Modal ดูรายละเอียดจากกราฟ */}
+           {showChartDetails && (
+            <div className="fixed inset-0 z-[99999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
+                <div className="bg-white rounded-[2rem] w-full max-w-sm flex flex-col shadow-2xl overflow-hidden border border-slate-200 max-h-[80vh]">
+                    <div className="bg-violet-600 py-4 px-5 flex justify-between items-center text-white">
+                        <h2 className="font-black text-lg">รายละเอียดการเข้าแถว</h2>
+                        <button onClick={() => setShowChartDetails(false)} className="w-8 h-8 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center"><i className="fas fa-times"></i></button>
+                    </div>
+                    <div className="p-5 overflow-y-auto custom-scrollbar flex-1 bg-slate-50">
+                        <div className="mb-4">
+                            <h3 className="text-red-600 font-bold text-sm mb-2 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> ขาดเรียน ({sortedStudents.filter(s => getIndividualStats(s.id).a > 0).length} คน)</h3>
+                            <ul className="text-sm text-slate-600 space-y-1 pl-4">
+                                {sortedStudents.filter(s => getIndividualStats(s.id).a > 0).map(s => (
+                                    <li key={s.id}>เลขที่ {s.number} {s.name} <span className="text-red-500 text-xs">({getIndividualStats(s.id).a} ครั้ง)</span></li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="mb-4">
+                            <h3 className="text-blue-600 font-bold text-sm mb-2 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div> ลา ({sortedStudents.filter(s => getIndividualStats(s.id).e > 0).length} คน)</h3>
+                            <ul className="text-sm text-slate-600 space-y-1 pl-4">
+                                {sortedStudents.filter(s => getIndividualStats(s.id).e > 0).map(s => (
+                                    <li key={s.id}>เลขที่ {s.number} {s.name} <span className="text-blue-500 text-xs">({getIndividualStats(s.id).e} ครั้ง)</span></li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
            )}
 
@@ -697,10 +701,10 @@
                  <div className="animate-in fade-in space-y-4">
                     
                     <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
-                        <button onClick={() => {initAudio(); playSound('tap'); setCheckMode('manual');}} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${checkMode === 'manual' ? 'bg-white text-violet-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
+                        <button onClick={() => {initAudio(); playSound('tap', settings.soundEnabled); setCheckMode('manual');}} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${checkMode === 'manual' ? 'bg-white text-violet-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
                             <i className="fas fa-hand-pointer mr-1"></i> เช็คชื่อรายบุคคล
                         </button>
-                        <button onClick={() => {initAudio(); playSound('tap'); setCheckMode('qr');}} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${checkMode === 'qr' ? 'bg-white text-violet-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
+                        <button onClick={() => {initAudio(); playSound('tap', settings.soundEnabled); setCheckMode('qr');}} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${checkMode === 'qr' ? 'bg-white text-violet-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
                             <i className="fas fa-id-card mr-1"></i> สแกนบัตรนักเรียน
                         </button>
                     </div>
@@ -710,7 +714,8 @@
                             <h3 className="text-slate-800 font-bold mb-2 flex items-center gap-2">
                                 <i className="fas fa-camera text-violet-500"></i> สแกน QR Code ในบัตร
                             </h3>
-                            <div className="w-full max-w-sm aspect-square relative rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-violet-300">
+                            {/* ขยายกรอบสแกนให้ใหญ่ขึ้น */}
+                            <div className="w-full max-w-md aspect-square relative rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-violet-300">
                                 <div id="reader" className="w-full h-full"></div>
                                 {!scannerActive && <div className="absolute inset-0 flex items-center justify-center text-slate-400 font-medium">กำลังเปิดกล้อง...</div>}
                             </div>
@@ -730,7 +735,7 @@
                                 </h2>
                                 <p className="text-xs text-slate-500 font-medium">รวมนักเรียน (ปกติ) {currentSummary.total} คน</p>
                             </div>
-                            <input type="date" value={currentDate} onChange={e=>{initAudio(); playSound('tap'); setCurrentDate(e.target.value);}} className="text-sm px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 font-bold text-violet-700 outline-none focus:border-violet-500 shadow-inner" />
+                            <input type="date" value={currentDate} onChange={e=>{initAudio(); playSound('tap', settings.soundEnabled); setCurrentDate(e.target.value);}} className="text-sm px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 font-bold text-violet-700 outline-none focus:border-violet-500 shadow-inner" />
                         </div>
                         
                         <div className="flex gap-2">
@@ -756,7 +761,7 @@
                     </div>
 
                     <div className="space-y-3">
-                        {[...students].sort((a,b)=>a.number-b.number).map(student => {
+                        {sortedStudents.map(student => {
                             const isActive = (!student.status || student.status === 'active');
                             const status = attendance[student.id] || 'present';
                             const studentNote = tempNotes[student.id] || '';
@@ -847,12 +852,15 @@
                         )}
 
                         <div className="flex flex-col items-center justify-center mb-6">
-                            <div className="donut-chart mb-3" style={getDonutStyle()}>
+                            <div className="donut-chart mb-3 relative" style={getDonutStyle()} onClick={() => setShowChartDetails(true)} title="กดเพื่อดูรายละเอียด">
                                 <div className="donut-inner">
                                     <span className="text-[10px] font-bold text-slate-400">มาเรียนเฉลี่ย</span>
                                     <span className="text-xl font-black text-emerald-500">
                                         {reportSummary.total === 0 ? 0 : Math.round((reportSummary.p/reportSummary.total)*100)}%
                                     </span>
+                                </div>
+                                <div className="absolute -bottom-2 -right-2 bg-white rounded-full w-6 h-6 flex items-center justify-center shadow-md text-violet-500 border border-slate-100">
+                                    <i className="fas fa-search-plus text-[10px]"></i>
                                 </div>
                             </div>
                             <div className="flex gap-3 text-[10px] font-bold text-slate-600 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
@@ -873,7 +881,7 @@
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2 mb-2">
+                        <div className="grid grid-cols-3 gap-2 mb-6">
                             <button onClick={exportExcel} disabled={isExporting} className="bg-emerald-50 text-emerald-700 border border-emerald-200 py-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition-all shadow-sm">
                                 <i className="fas fa-file-excel text-xl"></i> <span className="text-[10px]">ไฟล์ Excel</span>
                             </button>
@@ -884,6 +892,29 @@
                                 <i className="fas fa-image text-xl"></i> <span className="text-[10px]">บันทึกเป็นรูป</span>
                             </button>
                         </div>
+
+                        {/* แสดงสถิติรายบุคคล */}
+                        <div className="border-t border-slate-100 pt-4">
+                            <h3 className="font-bold text-slate-700 text-sm mb-3"><i className="fas fa-user-chart text-violet-500 mr-1"></i> สถิติรายบุคคล (ช่วงเวลาที่เลือก)</h3>
+                            <div className="bg-slate-50 rounded-xl border border-slate-200 max-h-60 overflow-y-auto custom-scrollbar p-1">
+                                {sortedStudents.filter(s=>s.status==='active').map(s => {
+                                    const stats = getIndividualStats(s.id);
+                                    return (
+                                        <div key={s.id} className="flex justify-between items-center p-2 border-b border-slate-100 last:border-0 hover:bg-white transition-colors text-xs font-medium text-slate-600">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-slate-400 w-4 text-right">{s.number}.</span>
+                                                <span className="truncate w-32 sm:w-48">{s.name}</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <span className="text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">ม. {stats.p}</span>
+                                                <span className="text-red-500 bg-red-50 px-1.5 py-0.5 rounded">ข. {stats.a}</span>
+                                                <span className="text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">ล. {stats.e}</span>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
                     </div>
                  </div>
               )}
@@ -893,37 +924,29 @@
                  <div className="animate-in fade-in space-y-4 pb-8">
                     
                     <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
-                        <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center"><i className="fas fa-cog"></i></div> ข้อมูลห้องและลายเซ็น</h2>
+                        <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center"><i className="fas fa-cog"></i></div> ตั้งค่าระบบ</h2>
                         <div className="space-y-4">
                             <div>
                                 <label className="text-xs font-bold text-slate-500 block mb-1">ชื่อห้อง (เช่น ม.1/1)</label>
                                 <input type="text" value={tempSettings.roomName} onChange={e=>setTempSettings({...tempSettings, roomName: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 outline-none focus:border-violet-500" />
                             </div>
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">ตำแหน่ง (เช่น ครูที่ปรึกษา, หัวหน้าห้อง)</label>
-                                <input type="text" value={tempSettings.signerRole} onChange={e=>setTempSettings({...tempSettings, signerRole: e.target.value})} placeholder="พิมพ์ตำแหน่ง..." className="w-full p-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 outline-none focus:border-violet-500" />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">ชื่อ-นามสกุล (ผู้ตรวจ)</label>
-                                <input type="text" value={tempSettings.teacherName} onChange={e=>setTempSettings({...tempSettings, teacherName: e.target.value})} placeholder="นาย/นาง/นางสาว..." className="w-full p-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 outline-none focus:border-violet-500" />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-2 flex justify-between items-center">
-                                    <span>กระดานลายเซ็น</span>
-                                    {isSigLocked ? (
-                                        <button onClick={() => setIsSigLocked(false)} className="text-violet-600 bg-violet-100 px-3 py-1 rounded-full text-xs font-bold"><i className="fas fa-unlock"></i> ปลดล็อคเพื่อเขียน</button>
-                                    ) : (
-                                        <button onClick={clearSignature} className="text-red-500 hover:text-red-700 bg-red-50 px-3 py-1 rounded-full text-xs font-bold"><i className="fas fa-eraser"></i> ล้าง</button>
-                                    )}
-                                </label>
-                                <div className={`relative rounded-xl overflow-hidden ${isSigLocked ? 'opacity-60' : ''}`}>
-                                    <canvas ref={canvasRef} width={300} height={100} className={`signature-pad w-full ${isSigLocked ? 'bg-slate-50 border-slate-200 cursor-not-allowed' : ''}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}></canvas>
-                                    {isSigLocked && <div className="absolute inset-0 flex items-center justify-center"><i className="fas fa-lock text-3xl text-slate-300"></i></div>}
+                            
+                            <div className="flex items-center justify-between p-3 border border-slate-200 rounded-xl bg-slate-50">
+                                <div>
+                                    <p className="text-sm font-bold text-slate-700">เสียงแสกนและปุ่มกด</p>
+                                    <p className="text-[10px] text-slate-500">เปิด/ปิดเสียงเวลากดปุ่ม หรือสแกนสำเร็จ</p>
                                 </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                  <input type="checkbox" className="sr-only peer" checked={tempSettings.soundEnabled} onChange={(e) => {
+                                      initAudio(); playSound('tap', true);
+                                      setTempSettings({...tempSettings, soundEnabled: e.target.checked});
+                                  }} />
+                                  <div className="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-500"></div>
+                                </label>
                             </div>
 
                             <button onClick={saveSettings} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-md hover:bg-slate-700 active:scale-95 transition-all mt-2">
-                                <i className="fas fa-save mr-1"></i> บันทึกและล็อคการตั้งค่า
+                                <i className="fas fa-save mr-1"></i> บันทึกการตั้งค่า
                             </button>
                         </div>
                     </div>
@@ -933,7 +956,7 @@
                             <h2 className="text-lg font-black text-slate-800 flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-blue-100 text-blue-500 flex items-center justify-center"><i className="fas fa-users"></i></div> จัดการรายชื่อ ({students.length})</h2>
                             {students.length > 0 && (
                                 <button onClick={() => executeExport('pdf_qr_selected')} disabled={selectedForPrint.length === 0} className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                                    <i className="fas fa-print"></i> ปริ้นต์บัตรสีม่วง ({selectedForPrint.length})
+                                    <i className="fas fa-print"></i> ปริ้นต์บัตรสีม่วงแนวนอน ({selectedForPrint.length})
                                 </button>
                             )}
                         </div>
@@ -965,11 +988,12 @@
                                     className="w-4 h-4 accent-violet-600 cursor-pointer" id="selectAllQR" 
                                 />
                                 <label htmlFor="selectAllQR" className="text-xs font-bold text-slate-600 cursor-pointer">เลือกพิมพ์บัตรทั้งหมด</label>
+                                <span className="text-[10px] text-slate-400 ml-auto">(ระบบจัดเรียงตามเลขที่อัตโนมัติ)</span>
                             </div>
                         )}
 
                         <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 custom-scrollbar shadow-sm">
-                            {[...students].sort((a,b)=>a.number-b.number).map(s => {
+                            {sortedStudents.map(s => {
                                 const currentStatus = s.status || 'active';
                                 const isPrintable = currentStatus === 'active';
                                 const stats = getIndividualStats(s.id); 
@@ -977,10 +1001,14 @@
                                 return (
                                 <div key={s.id} className={`flex flex-col p-3 hover:bg-slate-50 transition-colors ${currentStatus === 'active' ? 'bg-white' : 'bg-slate-50 opacity-70'}`}>
                                     {editingStudentId === s.id ? (
-                                        <div className="flex items-center gap-2 w-full animate-in fade-in">
-                                            <input type="number" value={editStudentNumber} onChange={e=>setEditStudentNumber(e.target.value)} className="w-12 p-2 border border-violet-300 rounded-lg text-sm outline-none text-center font-bold" />
-                                            <input type="text" value={editStudentName} onChange={e=>setEditStudentName(e.target.value)} className="flex-1 p-2 border border-violet-300 rounded-lg text-sm outline-none font-medium" />
-                                            <button onClick={() => saveEditStudent(s.id)} className="bg-emerald-500 text-white px-3 py-2 rounded-lg font-bold text-xs shadow-sm hover:bg-emerald-600"><i className="fas fa-save"></i></button>
+                                        <div className="flex flex-col sm:flex-row items-center gap-2 w-full animate-in fade-in bg-violet-50 p-2 rounded-lg border border-violet-200">
+                                            <div className="flex items-center gap-2 w-full">
+                                                <label className="text-xs font-bold text-violet-700 whitespace-nowrap">เลขที่</label>
+                                                <input type="number" value={editStudentNumber} onChange={e=>setEditStudentNumber(e.target.value)} className="w-16 p-2 border border-violet-300 rounded-lg text-sm outline-none text-center font-bold" />
+                                                <input type="text" value={editStudentName} onChange={e=>setEditStudentName(e.target.value)} className="flex-1 p-2 border border-violet-300 rounded-lg text-sm outline-none font-medium" />
+                                                <button onClick={() => saveEditStudent(s.id)} className="bg-emerald-500 text-white px-3 py-2 rounded-lg font-bold text-xs shadow-sm hover:bg-emerald-600"><i className="fas fa-save"></i> บันทึก</button>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 w-full text-center mt-1">เปลี่ยนเลขที่แล้วระบบจะเรียงลำดับใหม่ให้เอง</p>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col sm:flex-row justify-between w-full gap-2">
@@ -1029,14 +1057,14 @@
                                             
                                             <div className="flex items-center gap-1.5 shrink-0 pl-14 sm:pl-0 mt-2 sm:mt-0 self-end sm:self-center">
                                                 {isPrintable && (
-                                                    <button onClick={() => { initAudio(); playSound('tap'); setSelectedQRStudent(s); }} className="w-8 h-8 rounded-lg text-violet-500 bg-violet-50 hover:bg-violet-100 border border-violet-200 flex items-center justify-center transition-colors shadow-sm" title="ดูบัตรนักเรียน"><i className="fas fa-id-card text-xs"></i></button>
+                                                    <button onClick={() => { initAudio(); playSound('tap', settings.soundEnabled); setSelectedQRStudent(s); }} className="w-8 h-8 rounded-lg text-violet-500 bg-violet-50 hover:bg-violet-100 border border-violet-200 flex items-center justify-center transition-colors shadow-sm" title="ดูบัตรนักเรียน"><i className="fas fa-id-card text-xs"></i></button>
                                                 )}
                                                 <select value={currentStatus} onChange={(e) => updateStudentStatus(s.id, e.target.value)} className={`text-[10px] font-bold p-1.5 rounded-lg outline-none border shadow-sm transition-colors ${currentStatus === 'active' ? 'bg-white border-slate-300 text-slate-600' : 'bg-red-50 border-red-200 text-red-600'}`}>
                                                     <option value="active">ปกติ</option>
                                                     <option value="none">ไม่มีตัวตน</option>
                                                     <option value="moved">ย้าย</option>
                                                 </select>
-                                                <button onClick={() => startEditStudent(s)} className="w-8 h-8 rounded-lg text-blue-500 hover:bg-blue-50 border border-transparent hover:border-blue-200 flex items-center justify-center transition-colors"><i className="fas fa-pen text-xs"></i></button>
+                                                <button onClick={() => startEditStudent(s)} className="w-8 h-8 rounded-lg text-blue-500 hover:bg-blue-50 border border-transparent hover:border-blue-200 flex items-center justify-center transition-colors" title="แก้ไขเลขที่และชื่อ"><i className="fas fa-pen text-xs"></i></button>
                                                 <button onClick={() => deleteStudent(s)} className="w-8 h-8 rounded-lg text-red-400 hover:bg-red-50 border border-transparent hover:border-red-200 flex items-center justify-center transition-colors"><i className="fas fa-trash text-xs"></i></button>
                                             </div>
                                         </div>
@@ -1144,51 +1172,42 @@
                       </table>
                   </div>
 
-                  <div style={{ flexShrink: 0, marginTop: 'auto', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <div style={{ flexShrink: 0, marginTop: 'auto', paddingTop: '10px', display: 'flex', justifyContent: 'flex-start' }}>
                       <div style={{ fontSize: '12px', color: '#4c1d95', backgroundColor: '#f3e8ff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #d8b4fe' }}>
                           <b>คำอธิบาย:</b> <span style={{color: '#10b981', fontWeight: 'bold'}}>✓ มา</span>, <span style={{color: '#ef4444', fontWeight: 'bold'}}>ข ขาด</span>, <span style={{color: '#3b82f6', fontWeight: 'bold'}}>ล ลา</span>
-                      </div>
-                      
-                      <div style={{ textAlign: 'center', color: '#4c1d95', minWidth: '220px' }}>
-                          <p style={{ fontSize: '13px', marginBottom: '5px' }}>ลงชื่อ{settings.signerRole || 'ผู้ประเมิน'}</p>
-                          {settings.signatureImg ? (
-                              <img src={settings.signatureImg} style={{ height: '40px', objectFit: 'contain', margin: '0 auto', display: 'block' }} />
-                          ) : (
-                              <div style={{ height: '35px', lineHeight: '35px' }}>...................................................</div>
-                          )}
-                          <p style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '5px' }}>( {settings.teacherName || '...........................................'} )</p>
                       </div>
                   </div>
              </div>
              
-             {/* ----------------- โครงสร้างบัตรนักเรียนรวม (แบ่งหน้าด้วย Chunk หน้าละ 9 ใบ) ----------------- */}
+             {/* ----------------- โครงสร้างบัตรนักเรียนรวม แนวนอน (แบ่งหน้าด้วย Chunk หน้าละ 10 ใบ) ----------------- */}
              <div id="pdf-qr-container" className="font-sarabun text-slate-800" style={{ position: 'absolute', left: '-9999px', top: 0, backgroundColor: 'white' }}>
                   {cardChunks.map((chunk, chunkIndex) => (
                       <div key={chunkIndex} className={`pdf-page-chunk ${chunkIndex > 0 ? 'page-break' : ''}`}>
-                          <div className="text-center mb-6 pb-4 border-b-2 border-violet-500">
-                              <h1 className="text-[24px] font-bold text-violet-900">บัตรประจำตัวนักเรียนสำหรับเช็คชื่อ</h1>
-                              <h2 className="text-[16px] text-violet-700">ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
-                              <p className="text-[12px] text-slate-500 mt-1">* กรุณาตัดตามรอย และให้นักเรียนเก็บไว้สำหรับสแกนเข้าแถว</p>
+                          <div className="text-center mb-6 pb-2 border-b-2 border-violet-500 shrink-0">
+                              <h1 className="text-[22px] font-bold text-violet-900">บัตรประจำตัวนักเรียนสำหรับเช็คชื่อ</h1>
+                              <h2 className="text-[15px] text-violet-700">ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
                           </div>
                           
-                          <div className="grid grid-cols-3 gap-5">
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-4 flex-1 content-start">
                               {chunk.map(s => (
-                                  <div key={s.id} className="border border-slate-300 rounded-2xl overflow-hidden flex flex-col shadow-sm">
-                                      <div className="bg-violet-600 py-1.5 text-center">
-                                          <h2 className="text-white font-black text-xs tracking-wide">RowCheck</h2>
-                                      </div>
-                                      <div className="p-4 flex flex-col items-center bg-white flex-1 relative">
-                                          <div className="w-16 h-20 bg-slate-100 border-2 border-slate-200 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
-                                              {s.image ? <img src={s.image} className="w-full h-full object-cover" /> : <i className="fas fa-user text-slate-300 text-2xl"></i>}
+                                  <div key={s.id} className="border-2 border-slate-300 rounded-xl overflow-hidden flex h-[160px]">
+                                      <div className="w-[110px] bg-slate-100 flex-shrink-0 border-r-2 border-slate-200 flex flex-col relative">
+                                          <div className="flex-1 flex items-center justify-center p-2 bg-white m-1.5 rounded-lg border border-slate-200">
+                                              {s.image ? <img src={s.image} className="w-full h-full object-cover rounded-md" /> : <i className="fas fa-user text-slate-300 text-4xl"></i>}
                                           </div>
-                                          <div className="mb-2 border border-slate-100 p-1 rounded-lg">
-                                              <QRCodeCanvas text={s.id} size={85} />
+                                          <div className="bg-violet-600 text-white text-[12px] font-bold text-center py-1 absolute bottom-0 w-full">
+                                              เลขที่ {s.number}
                                           </div>
-                                          <h3 className="font-bold text-slate-800 text-[13px] text-center mb-1 leading-tight h-8 overflow-hidden">{s.name}</h3>
-                                          <p className="text-slate-500 font-bold text-[10px]">เลขที่ {s.number} <span className="mx-1">|</span> รหัส {s.id.substring(0,6).toUpperCase()}</p>
                                       </div>
-                                      <div className="bg-violet-600 py-1.5 text-center">
-                                          <p className="text-white text-[10px] font-bold">ห้อง : {settings.roomName}</p>
+                                      <div className="flex-1 bg-white p-3 flex flex-col justify-center relative">
+                                          <div className="pr-16">
+                                              <h3 className="font-bold text-slate-800 text-[15px] leading-tight mb-1">{s.name}</h3>
+                                              <p className="text-slate-500 font-bold text-[11px]">รหัส: {s.id}</p>
+                                              <p className="text-violet-600 font-bold text-[11px] mt-0.5">ห้อง: {settings.roomName}</p>
+                                          </div>
+                                          <div className="absolute right-3 top-1/2 -translate-y-1/2 border border-slate-200 p-1.5 rounded-xl bg-white shadow-sm">
+                                              <QRCodeCanvas text={s.id} size={70} />
+                                          </div>
                                       </div>
                                   </div>
                               ))}
@@ -1200,13 +1219,13 @@
 
            {/* Bottom Navigation */}
            <div className="fixed bottom-4 left-4 right-4 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl flex p-2 z-40 shadow-2xl shadow-slate-200 max-w-md mx-auto">
-                <button onClick={() => {setActiveTab('check'); initAudio(); playSound('tap');}} className={`flex flex-col items-center justify-center p-2 rounded-xl flex-1 transition-all ${activeTab==='check'?'bg-violet-100 text-violet-700 font-black shadow-inner':'text-slate-400 font-bold hover:bg-slate-50'}`}>
+                <button onClick={() => {setActiveTab('check'); initAudio(); playSound('tap', settings.soundEnabled);}} className={`flex flex-col items-center justify-center p-2 rounded-xl flex-1 transition-all ${activeTab==='check'?'bg-violet-100 text-violet-700 font-black shadow-inner':'text-slate-400 font-bold hover:bg-slate-50'}`}>
                     <i className="fas fa-clipboard-check text-lg mb-1"></i><span className="text-[10px]">เช็คชื่อ</span>
                 </button>
-                <button onClick={() => {setActiveTab('report'); initAudio(); playSound('tap');}} className={`flex flex-col items-center justify-center p-2 rounded-xl flex-1 transition-all ${activeTab==='report'?'bg-violet-100 text-violet-700 font-black shadow-inner':'text-slate-400 font-bold hover:bg-slate-50'}`}>
+                <button onClick={() => {setActiveTab('report'); initAudio(); playSound('tap', settings.soundEnabled);}} className={`flex flex-col items-center justify-center p-2 rounded-xl flex-1 transition-all ${activeTab==='report'?'bg-violet-100 text-violet-700 font-black shadow-inner':'text-slate-400 font-bold hover:bg-slate-50'}`}>
                     <i className="fas fa-file-export text-lg mb-1"></i><span className="text-[10px]">รายงาน</span>
                 </button>
-                <button onClick={() => {setActiveTab('settings'); initAudio(); playSound('tap');}} className={`flex flex-col items-center justify-center p-2 rounded-xl flex-1 transition-all ${activeTab==='settings'?'bg-violet-100 text-violet-700 font-black shadow-inner':'text-slate-400 font-bold hover:bg-slate-50'}`}>
+                <button onClick={() => {setActiveTab('settings'); initAudio(); playSound('tap', settings.soundEnabled);}} className={`flex flex-col items-center justify-center p-2 rounded-xl flex-1 transition-all ${activeTab==='settings'?'bg-violet-100 text-violet-700 font-black shadow-inner':'text-slate-400 font-bold hover:bg-slate-50'}`}>
                     <i className="fas fa-cog text-lg mb-1"></i><span className="text-[10px]">ตั้งค่า</span>
                 </button>
            </div>
