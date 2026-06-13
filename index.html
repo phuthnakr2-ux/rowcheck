@@ -30,10 +30,12 @@
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     
-    /* PDF Report Layout - ล็อคขนาด A4 (794x1123) แบบตายตัวสุดๆ */
-    #pdf-report-container { width: 794px; height: 1123px; padding: 35px 45px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-    .pdf-table { width: 100%; border-collapse: collapse; margin-top: 15px; border: 1px solid #d8b4fe; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .pdf-table th, .pdf-table td { border: 1px solid #e9d5ff; vertical-align: middle; text-align: center; line-height: 1.5; padding-top: 8px !important; padding-bottom: 8px !important; }
+    /* PDF Report Layout - ล็อคขนาด A4 (794x1123) แบบตายตัว และบังคับตารางเต็มพื้นที่ */
+    #pdf-report-container { width: 794px !important; min-width: 794px !important; max-width: 794px !important; min-height: 1123px; padding: 35px 45px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; position: relative; margin: 0 auto; }
+    
+    /* table-layout: fixed คือพระเอกที่แก้ปัญหาตารางหดตัว */
+    .pdf-table { width: 100% !important; table-layout: fixed; border-collapse: collapse; margin-top: 15px; border: 1px solid #d8b4fe; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .pdf-table th, .pdf-table td { border: 1px solid #e9d5ff; vertical-align: middle; text-align: center; line-height: 1.5; padding-top: 8px !important; padding-bottom: 8px !important; overflow: hidden; word-wrap: break-word; }
     .pdf-table th { background: linear-gradient(135deg, #8b5cf6 0%, #c026d3 100%); color: white; font-weight: 700; font-size: 14px; letter-spacing: 0.5px; }
     .pdf-table tbody tr:nth-child(even) { background-color: #faf5ff; }
     .pdf-table tbody tr:nth-child(odd) { background-color: #ffffff; }
@@ -41,7 +43,7 @@
     
     /* PDF Student ID Card Layout แนวนอน - หน้าละ 8 ใบ ขนาด A4 */
     .page-break { page-break-before: always; }
-    .pdf-page-chunk { width: 794px; height: 1123px; padding: 35px 30px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .pdf-page-chunk { width: 794px !important; min-width: 794px !important; height: 1123px; padding: 35px 30px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; position: relative; margin: 0 auto; }
     
     .donut-chart { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.2s; }
     .donut-chart:hover { transform: scale(1.05); }
@@ -59,7 +61,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useMemo, useRef } = React;
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
     // ==========================================
     // ลิงก์ API หลังบ้าน (GAS)
@@ -163,7 +165,7 @@
       const [selectedQRStudent, setSelectedQRStudent] = useState(null);
 
       // --- Cloud Sync API ---
-      const fetchInitialData = async () => {
+      const fetchInitialData = useCallback(async (showNotification = false) => {
           if(!GOOGLE_APP_SCRIPT_URL) return;
           setIsSyncing(true);
           try {
@@ -176,10 +178,25 @@
                   }
                   if(json.students && json.students.length > 0) setStudents(json.students);
                   if(json.records && json.records.length > 0) setRecords(json.records);
+                  if(showNotification) showToast("ซิงค์ข้อมูลล่าสุดสำเร็จ");
               }
-          } catch(e) { console.error("Cloud fetch failed", e); }
+          } catch(e) { 
+              console.error("Cloud fetch failed", e); 
+              if(showNotification) showToast("ซิงค์ข้อมูลล้มเหลว กรุณาลองใหม่");
+          }
           setIsSyncing(false);
-      };
+      }, []);
+
+      // ซิงค์อัตโนมัติเมื่อกลับมาหน้าแอป (Visibility Change)
+      useEffect(() => {
+          const handleVisibilityChange = () => {
+              if (document.visibilityState === 'visible') {
+                  fetchInitialData(false); // ซิงค์แบบเงียบๆ ไม่ต้องโชว์แจ้งเตือน
+              }
+          };
+          document.addEventListener('visibilitychange', handleVisibilityChange);
+          return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }, [fetchInitialData]);
 
       const syncDataToCloud = async (action, payload) => {
           if(!GOOGLE_APP_SCRIPT_URL) return;
@@ -193,7 +210,8 @@
           setIsSyncing(false);
       };
 
-      useEffect(() => { fetchInitialData(); }, []);
+      // ดึงข้อมูลครั้งแรกตอนโหลดเว็บ
+      useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
 
       useEffect(() => {
           localStorage.setItem('rc_pro_settings', JSON.stringify(settings));
@@ -214,7 +232,6 @@
               setTempNotes(existRecord.notes || {}); 
               setIsLocked(true); 
           } else {
-              // โหลดร่างจากการเช็คค้างไว้ (Auto-save)
               const draftStr = localStorage.getItem('rc_pro_draft_' + currentDate);
               if (draftStr) {
                   try {
@@ -225,7 +242,6 @@
                       setAttendance({}); setTempNotes({});
                   }
               } else {
-                  // ถ้าไม่มีร่าง เริ่มต้นเป็นค่าว่างทั้งหมด
                   setAttendance({}); setTempNotes({});
               }
               setNotes({});
@@ -233,7 +249,7 @@
           }
       }, [currentDate, students, records]);
 
-      // ระบบ Auto-save (เซฟร่างเมื่อมีการเปลี่ยนแปลง แต่ยังไม่กดล็อค)
+      // ระบบ Auto-save
       useEffect(() => {
           if (!isLocked) {
               localStorage.setItem('rc_pro_draft_' + currentDate, JSON.stringify({ attendance, notes: tempNotes }));
@@ -248,7 +264,6 @@
           else stopScanner();
           
           return () => {
-              // ล้างข้อมูลอย่างปลอดภัยเวลา Component ถูกทำลาย
               if (html5QrCodeRef.current && scannerActive) {
                   html5QrCodeRef.current.stop().then(() => {
                       html5QrCodeRef.current.clear();
@@ -319,7 +334,6 @@
 
       const sortedStudents = useMemo(() => [...students].sort((a,b)=>a.number-b.number), [students]);
       
-      // การคำนวณสถานะเช็คชื่อ (เพื่อให้รู้ว่าเช็คครบหรือยัง)
       const activeStudentsCount = sortedStudents.filter(s => !s.status || s.status === 'active').length;
       const checkedStudentsCount = sortedStudents.filter(s => (!s.status || s.status === 'active') && attendance[s.id]).length;
       const allChecked = checkedStudentsCount === activeStudentsCount;
@@ -329,7 +343,7 @@
           if (!allChecked) {
               initAudio(); playSound('tap', settings.soundEnabled);
               showToast(`กรุณาเช็คชื่อให้ครบทุกคน (ขาดอีก ${missingCount} คน)`);
-              return; // บังคับให้เช็คครบก่อนเซฟ
+              return; 
           }
 
           initAudio(); playSound('success', settings.soundEnabled);
@@ -339,7 +353,7 @@
           setNotes(tempNotes); 
           setIsLocked(true); 
           syncDataToCloud('saveAttendance', newRecord);
-          localStorage.removeItem('rc_pro_draft_' + currentDate); // ล้างร่างทิ้งเมื่อเซฟสำเร็จ
+          localStorage.removeItem('rc_pro_draft_' + currentDate);
           showToast('บันทึกและล็อคข้อมูลเรียบร้อย');
       };
 
@@ -394,7 +408,7 @@
       }, [sortedStudents, reportSearchQuery]);
 
       const getAttendanceForDate = (date) => {
-          if (date === currentDate && isLocked) return attendance; // ดึงข้อมูลปัจจุบันแค่ตอนล็อคแล้วเท่านั้น
+          if (date === currentDate && isLocked) return attendance; 
           const rec = records.find(r => r.date === date);
           return rec ? rec.data : null;
       };
@@ -757,8 +771,17 @@
                   <span className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-fuchsia-600 tracking-tight">RowCheck</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    {isSyncing && <i className="fas fa-sync-alt fa-spin text-violet-500 text-sm"></i>}
-                    <div className="bg-violet-50 px-3 py-1.5 rounded-full border border-violet-100 shadow-sm">
+                    {/* ปุ่ม Sync ซิงค์ข้อมูลด้วยมือ */}
+                    <button 
+                        onClick={() => fetchInitialData(true)} 
+                        disabled={isSyncing} 
+                        className="w-8 h-8 rounded-full bg-violet-50 text-violet-500 flex items-center justify-center hover:bg-violet-100 transition-colors shadow-sm border border-violet-100"
+                        title="กดเพื่อดึงข้อมูลล่าสุด"
+                    >
+                        <i className={`fas fa-sync-alt text-xs ${isSyncing ? 'fa-spin' : ''}`}></i>
+                    </button>
+                    
+                    <div className="bg-violet-50 px-3 py-1.5 rounded-full border border-violet-100 shadow-sm ml-1">
                         <span className="text-xs font-bold text-violet-700">ห้อง {settings.roomName}</span>
                     </div>
                 </div>
@@ -773,7 +796,7 @@
 
            <main className="max-w-3xl mx-auto px-4 py-6 relative z-10">
 
-              {/* ----------------- TAB 1: เช็คชื่อ (เปลี่ยนเป็นใช้ Display: none แทนลบ DOM เพื่อแก้ปัญหาหน้าขาว) ----------------- */}
+              {/* ----------------- TAB 1: เช็คชื่อ ----------------- */}
               <div className={activeTab === 'check' ? "animate-in fade-in space-y-4" : "hidden"}>
                     
                     <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
@@ -1219,9 +1242,9 @@
                         <table className="pdf-table" style={{ width: '100%' }}>
                           <thead>
                             <tr>
-                              <th style={{width: '8%', padding: pdfStyles.padding}}>เลขที่</th>
+                              <th style={{width: '10%', padding: pdfStyles.padding}}>เลขที่</th>
                               <th style={{width: '15%', padding: pdfStyles.padding}}>รหัส</th>
-                              <th style={{width: reportDateList.length === 1 ? '42%' : '37%', padding: pdfStyles.padding}}>ชื่อ - สกุล</th>
+                              <th style={{width: reportDateList.length === 1 ? '40%' : '35%', padding: pdfStyles.padding}}>ชื่อ - สกุล</th>
                               {reportDateList.length === 1 ? (
                                   <>
                                   <th style={{width: '12%', padding: pdfStyles.padding}}>สถานะ</th>
