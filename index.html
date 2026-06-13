@@ -31,19 +31,17 @@
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     
     /* PDF Report Layout - บังคับขนาด A4 หน้าเดียว */
-    #pdf-report-container { width: 794px; min-height: 1123px; padding: 30px 40px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
-    .pdf-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 15px; border: 1px solid #d8b4fe; border-radius: 8px; overflow: hidden; }
-    .pdf-table th, .pdf-table td { border-bottom: 1px solid #e9d5ff; border-right: 1px solid #e9d5ff; vertical-align: middle; text-align: center; }
-    .pdf-table th:last-child, .pdf-table td:last-child { border-right: none; }
-    .pdf-table tbody tr:last-child td { border-bottom: none; }
-    .pdf-table th { background: linear-gradient(135deg, #8b5cf6 0%, #c026d3 100%); color: white; font-weight: 700; font-size: 14px; padding: 6px 4px; }
+    #pdf-report-container { width: 794px; min-height: 1123px; padding: 35px 45px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
+    .pdf-table { width: 100%; border-collapse: collapse; margin-top: 15px; border: 1px solid #d8b4fe; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .pdf-table th, .pdf-table td { border: 1px solid #e9d5ff; vertical-align: middle; text-align: center; }
+    .pdf-table th { background: linear-gradient(135deg, #8b5cf6 0%, #c026d3 100%); color: white; font-weight: 700; font-size: 14px; padding: 8px 4px; letter-spacing: 0.5px; }
     .pdf-table tbody tr:nth-child(even) { background-color: #faf5ff; }
     .pdf-table tbody tr:nth-child(odd) { background-color: #ffffff; }
-    .text-left-pdf { text-align: left !important; padding-left: 10px !important; font-weight: 600; color: #4c1d95; }
+    .text-left-pdf { text-align: left !important; padding-left: 12px !important; font-weight: 600; color: #4c1d95; }
     
-    /* PDF Student ID Card Layout แนวนอน - หน้าละ 8 ใบ */
+    /* PDF Student ID Card Layout แนวนอน - หน้าละ 8 ใบ ขนาดบัตรมาตรฐาน 8.5x5.4 cm */
     .page-break { page-break-before: always; }
-    .pdf-page-chunk { width: 794px; height: 1123px; padding: 25px 30px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
+    .pdf-page-chunk { width: 794px; min-height: 1123px; padding: 30px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
     
     .donut-chart { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.2s; }
     .donut-chart:hover { transform: scale(1.05); }
@@ -51,6 +49,10 @@
     
     #reader { width: 100%; border-radius: 16px; overflow: hidden; border: 3px solid #8b5cf6; }
     #reader video { object-fit: cover; }
+
+    /* ซ่อน Container ตอนปกติ โชว์ตอน Print ใต้ Loading */
+    .print-layer-hidden { display: none; }
+    .print-layer-visible { display: block; position: absolute; top: 0; left: 0; z-index: 100; width: 100%; background: white; }
   </style>
 </head>
 <body>
@@ -138,7 +140,9 @@
       const [tempNotes, setTempNotes] = useState({}); 
       const [isLocked, setIsLocked] = useState(false); 
       const [isSyncing, setIsSyncing] = useState(false);
+      
       const [searchQuery, setSearchQuery] = useState('');
+      const [reportSearchQuery, setReportSearchQuery] = useState(''); 
 
       const [reportStartDate, setReportStartDate] = useState(() => new Date().toISOString().split('T')[0]);
       const [reportEndDate, setReportEndDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -326,7 +330,6 @@
       
       const sortedStudents = useMemo(() => [...students].sort((a,b)=>a.number-b.number), [students]);
       
-      // ค้นหานักเรียนในหน้าเช็คชื่อ
       const filteredCheckStudents = useMemo(() => {
           if (!searchQuery.trim()) return sortedStudents;
           return sortedStudents.filter(s => 
@@ -336,7 +339,16 @@
           );
       }, [sortedStudents, searchQuery]);
 
-      // ดึงข้อมูลเช็คชื่อมาคำนวณ (ใช้ข้อมูลแบบเรียลไทม์ถ้าเป็นวันปัจจุบัน)
+      const filteredReportStudents = useMemo(() => {
+          const activeOnly = sortedStudents.filter(s => s.status === 'active');
+          if (!reportSearchQuery.trim()) return activeOnly;
+          return activeOnly.filter(s => 
+              s.name.includes(reportSearchQuery) || 
+              s.id.includes(reportSearchQuery) || 
+              s.number.toString() === reportSearchQuery.trim()
+          );
+      }, [sortedStudents, reportSearchQuery]);
+
       const getAttendanceForDate = (date) => {
           if (date === currentDate) return attendance;
           const rec = records.find(r => r.date === date);
@@ -414,7 +426,6 @@
           showToast('บันทึกการตั้งค่าแล้ว');
       };
 
-      // แปลงรูปภาพเป็น Base64 และบีบอัดก่อนบันทึกลงระบบ
       const handleImageUpload = (e, studentId) => {
           const file = e.target.files[0];
           if(!file) return;
@@ -425,7 +436,7 @@
               img.onload = () => {
                   const canvas = document.createElement('canvas'); 
                   const ctx = canvas.getContext('2d');
-                  const MAX_SIZE = 150; // บีบอัดเหลือ 150px เพื่อให้เซฟลง Sheets ได้ง่าย
+                  const MAX_SIZE = 150; 
                   let width = img.width; 
                   let height = img.height;
                   
@@ -435,7 +446,6 @@
                   canvas.width = width; canvas.height = height; 
                   ctx.drawImage(img, 0, 0, width, height);
                   
-                  // คุณภาพ 50% ทำให้ได้ไฟล์ที่เล็กมาก
                   const base64Data = canvas.toDataURL('image/jpeg', 0.5); 
                   
                   setStudents(prev => {
@@ -558,13 +568,16 @@
       };
       
       const cardsToPrint = sortedStudents.filter(s => selectedForPrint.includes(s.id));
-      const cardChunks = chunkArray(cardsToPrint, 8); // แบ่งหน้าละ 8 ใบ (แนวนอน 2 แถว 4 บรรทัด) ขนาดจะใหญ่กำลังดี
+      const cardChunks = chunkArray(cardsToPrint, 8); // แบ่งหน้าละ 8 ใบ พอดีๆกับขนาดบัตรมาตรฐาน
 
       const executeExport = async (type) => {
-          initAudio(); playSound('tap', settings.soundEnabled); setIsExporting(true); setIsGeneratingDoc(type); 
+          initAudio(); playSound('tap', settings.soundEnabled); 
+          setIsExporting(true); 
+          setIsGeneratingDoc(type); 
           window.scrollTo(0, 0); 
           
           try {
+              // ให้เวลา DOM แสดงขึ้นมาใต้ Loading Screen ก่อนจะแคปจอ
               setTimeout(async () => {
                   if (type === 'pdf_qr_selected') {
                       const element = document.getElementById('pdf-qr-container');
@@ -604,8 +617,9 @@
                           showToast('บันทึกรูปภาพสำเร็จ');
                       }
                   }
-                  setIsGeneratingDoc(''); setIsExporting(false);
-              }, 1000);
+                  setIsGeneratingDoc(''); 
+                  setIsExporting(false);
+              }, 800);
           } catch (error) { setIsGeneratingDoc(''); setIsExporting(false); showToast("เกิดข้อผิดพลาด"); }
       };
 
@@ -616,7 +630,7 @@
                <div className="absolute top-[20%] right-[-10%] w-[300px] h-[300px] bg-violet-400 rounded-full mix-blend-multiply filter blur-[80px] opacity-20 animate-blob animation-delay-2000"></div>
            </div>
 
-           {/* Modal โหลดเอกสาร */}
+           {/* Modal โหลดเอกสาร - z-index สูงสุด */}
            {isGeneratingDoc && (
             <div className="fixed inset-0 z-[99999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center">
               <i className="fas fa-spinner fa-spin text-violet-400 text-6xl mb-4 drop-shadow-[0_0_15px_rgba(167,139,250,0.5)]"></i>
@@ -626,28 +640,33 @@
 
            {/* Modal ดูบัตรเดี่ยวแนวนอน */}
            {selectedQRStudent && (
-            <div className="fixed inset-0 z-[99999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
-                <div id="single-qr-card-content" className="bg-white rounded-2xl w-[320px] shadow-2xl overflow-hidden border border-slate-200 relative flex flex-col">
-                    <div className="flex border-b-4 border-violet-500">
-                        <div className="w-1/3 bg-slate-100 flex-shrink-0 border-r border-slate-200 flex flex-col items-center justify-center pt-2">
-                            <div className="w-16 h-20 bg-white border border-slate-300 rounded-lg overflow-hidden flex items-center justify-center shadow-sm">
-                                {selectedQRStudent.image ? <img src={selectedQRStudent.image} className="w-full h-full object-cover" /> : <i className="fas fa-user text-slate-300 text-3xl"></i>}
-                            </div>
-                            <p className="bg-violet-600 text-white w-full text-center mt-2 py-1 text-[11px] font-bold tracking-wide">เลขที่ {selectedQRStudent.number}</p>
+            <div className="fixed inset-0 z-[99000] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
+                
+                {/* เลย์เอาต์บัตรเดี่ยว ตรงตามมาตรฐาน 8.5x5.4 */}
+                <div id="single-qr-card-content" className="w-[340px] h-[216px] border border-slate-300 rounded-xl flex overflow-hidden bg-white shadow-2xl shrink-0 relative">
+                    <div className="w-[35%] bg-slate-50 border-r border-slate-200 flex flex-col items-center p-2 relative">
+                        <div className="w-[85px] h-[110px] bg-white border border-slate-300 rounded-md overflow-hidden flex items-center justify-center shadow-sm mt-3 shrink-0">
+                            {selectedQRStudent.image ? <img src={selectedQRStudent.image} className="w-full h-full object-cover" /> : <i className="fas fa-user text-slate-300 text-4xl"></i>}
                         </div>
-                        <div className="w-2/3 p-4 flex flex-col justify-between bg-white relative">
-                            <div>
-                                <h3 className="font-black text-slate-800 text-[16px] leading-tight mb-1">{selectedQRStudent.name}</h3>
-                                <p className="text-slate-500 font-bold text-[11px]">รหัสประจำตัว: {selectedQRStudent.id}</p>
-                                <p className="text-violet-600 font-bold text-[11px] mt-0.5">ชั้น: {settings.roomName}</p>
-                            </div>
-                            <div className="absolute bottom-2 right-2 border border-slate-200 p-1 rounded-xl shadow-sm bg-white">
-                                <QRCodeCanvas text={selectedQRStudent.id} size={70} />
-                            </div>
+                        <div className="bg-violet-600 text-white text-[12px] font-bold text-center py-1.5 absolute bottom-0 w-full">
+                            เลขที่ {selectedQRStudent.number}
                         </div>
                     </div>
-                    <button onClick={() => setSelectedQRStudent(null)} data-html2canvas-ignore="true" className="absolute top-2 right-2 w-7 h-7 bg-slate-200/50 hover:bg-slate-200 text-slate-600 rounded-full flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
+                    <div className="w-[65%] p-4 flex flex-col justify-between">
+                        <div>
+                            <h3 className="font-bold text-slate-800 text-[15px] leading-tight mb-1 line-clamp-2">{selectedQRStudent.name}</h3>
+                            <p className="text-slate-500 font-bold text-[12px] mb-0.5 truncate">รหัส: {selectedQRStudent.id}</p>
+                            <p className="text-violet-600 font-bold text-[12px]">ห้อง: {settings.roomName}</p>
+                        </div>
+                        <div className="self-end mt-auto border border-slate-200 p-1.5 rounded-lg shadow-sm shrink-0">
+                            <QRCodeCanvas text={selectedQRStudent.id} size={70} />
+                        </div>
+                    </div>
+                    
+                    {/* ปุ่มปิด ซ่อนตอนพิมพ์ */}
+                    <button onClick={() => setSelectedQRStudent(null)} data-html2canvas-ignore="true" className="absolute top-2 right-2 w-7 h-7 bg-slate-100/80 hover:bg-slate-200 text-slate-600 rounded-full flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
                 </div>
+
                 <button onClick={() => executeExport('pdf_single_qr')} className="mt-6 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
                     <i className="fas fa-download mr-2"></i> บันทึกบัตรแนวนอน
                 </button>
@@ -656,7 +675,7 @@
 
            {/* Modal ดูรายละเอียดจากกราฟ */}
            {showChartDetails && (
-            <div className="fixed inset-0 z-[99999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
+            <div className="fixed inset-0 z-[99000] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
                 <div className="bg-white rounded-[2rem] w-full max-w-sm flex flex-col shadow-2xl overflow-hidden border border-slate-200 max-h-[80vh]">
                     <div className="bg-violet-600 py-4 px-5 flex justify-between items-center text-white">
                         <h2 className="font-black text-lg">รายละเอียดการเข้าแถว</h2>
@@ -687,8 +706,9 @@
            <nav className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-100 sticky top-0 z-40">
              <div className="max-w-3xl mx-auto px-4 h-16 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="bg-gradient-to-br from-violet-500 to-fuchsia-500 p-2 rounded-xl text-white shadow-sm">
-                      <i className="fas fa-clipboard-check text-lg"></i>
+                  {/* เปลี่ยนโลโก้จาก fa-clipboard-check เป็น fa-clipboard-list ตามใน PDF */}
+                  <div className="bg-gradient-to-br from-violet-500 to-fuchsia-500 w-10 h-10 flex items-center justify-center rounded-xl text-white shadow-sm">
+                      <i className="fas fa-clipboard-list text-xl"></i>
                   </div>
                   <span className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-fuchsia-600 tracking-tight">RowCheck</span>
                 </div>
@@ -777,7 +797,7 @@
                         <i className="fas fa-search text-slate-400"></i>
                         <input 
                             type="text" 
-                            placeholder="ค้นหาชื่อ หรือเลขประจำตัว..." 
+                            placeholder="ค้นหาชื่อ หรือรหัสประจำตัว..." 
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="flex-1 outline-none text-sm font-medium text-slate-700 bg-transparent placeholder:text-slate-400"
@@ -927,23 +947,43 @@
                         {/* แสดงสถิติรายบุคคล */}
                         <div className="border-t border-slate-100 pt-4">
                             <h3 className="font-bold text-slate-700 text-sm mb-3"><i className="fas fa-user-chart text-violet-500 mr-1"></i> สถิติรายบุคคล (ช่วงเวลาที่เลือก)</h3>
+                            
+                            {/* ช่องค้นหาในหน้าสถิติ */}
+                            <div className="bg-slate-50 rounded-xl px-3 py-2 mb-3 border border-slate-200 flex items-center gap-2">
+                                <i className="fas fa-search text-slate-400 text-xs"></i>
+                                <input 
+                                    type="text" 
+                                    placeholder="ค้นหาชื่อ หรือรหัสประจำตัว..." 
+                                    value={reportSearchQuery}
+                                    onChange={(e) => setReportSearchQuery(e.target.value)}
+                                    className="flex-1 outline-none text-xs font-medium text-slate-700 bg-transparent placeholder:text-slate-400"
+                                />
+                                {reportSearchQuery && (
+                                    <button onClick={() => setReportSearchQuery('')} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times-circle"></i></button>
+                                )}
+                            </div>
+
                             <div className="bg-slate-50 rounded-xl border border-slate-200 max-h-60 overflow-y-auto custom-scrollbar p-1">
-                                {sortedStudents.filter(s=>s.status==='active').map(s => {
-                                    const stats = getIndividualStats(s.id);
-                                    return (
-                                        <div key={s.id} className="flex justify-between items-center p-2 border-b border-slate-100 last:border-0 hover:bg-white transition-colors text-xs font-medium text-slate-600">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-slate-400 w-4 text-right">{s.number}.</span>
-                                                <span className="truncate w-32 sm:w-48">{s.name}</span>
+                                {filteredReportStudents.length === 0 ? (
+                                    <div className="text-center py-4 text-slate-500 text-xs font-medium">ไม่พบรายชื่อที่ค้นหา</div>
+                                ) : (
+                                    filteredReportStudents.map(s => {
+                                        const stats = getIndividualStats(s.id);
+                                        return (
+                                            <div key={s.id} className="flex justify-between items-center p-2 border-b border-slate-100 last:border-0 hover:bg-white transition-colors text-xs font-medium text-slate-600">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-slate-400 w-4 text-right">{s.number}.</span>
+                                                    <span className="truncate w-32 sm:w-48">{s.name}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <span className="text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">ม. {stats.p}</span>
+                                                    <span className="text-red-500 bg-red-50 px-1.5 py-0.5 rounded">ข. {stats.a}</span>
+                                                    <span className="text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">ล. {stats.e}</span>
+                                                </div>
                                             </div>
-                                            <div className="flex gap-2">
-                                                <span className="text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">ม. {stats.p}</span>
-                                                <span className="text-red-500 bg-red-50 px-1.5 py-0.5 rounded">ข. {stats.a}</span>
-                                                <span className="text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">ล. {stats.e}</span>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
+                                        )
+                                    })
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1109,146 +1149,147 @@
 
            </main>
 
-           {/* ----------------- ส่วน PDF หน้าเดียวสำหรับรายงานเช็คชื่อ ----------------- */}
-           <div className="fixed -left-[9999px] top-0">
-             <div id="pdf-report-container" className="font-sarabun text-slate-800">
-                  <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #8b5cf6', paddingBottom: '8px', marginBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', padding: '10px 12px', borderRadius: '10px', color: 'white' }}>
-                              <i className="fas fa-clipboard-list" style={{ fontSize: '20px' }}></i>
-                          </div>
-                          <div>
-                              <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#4c1d95', margin: '0' }}>รายงานการเข้าแถวหน้าเสาธง</h1>
-                              <h2 style={{ fontSize: '15px', color: '#6d28d9', margin: '0', marginTop: '2px' }}>ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
-                          </div>
-                      </div>
-                      <div style={{ textAlign: 'right', fontSize: '12px', color: '#5b21b6' }}>
-                          <p style={{ margin: '0', fontWeight: 'bold' }}>
-                              {reportDateList.length === 1 
-                                  ? `ประจำวันที่: ${formatDateObj(reportDateList[0])}` 
-                                  : `ช่วงวันที่: ${formatDateObj(reportDateList[0])} ถึง ${formatDateObj(reportDateList[reportDateList.length-1])}`}
-                          </p>
-                      </div>
-                  </div>
+           {/* ----------------- ส่วนเก็บกระดาษ PDF (ซ่อนไว้ โชว์ตอน Print ใต้ Loading) ----------------- */}
+           <div className={isGeneratingDoc ? "print-layer-visible" : "print-layer-hidden"}>
+               
+               {/* 1. PDF รายงานเช็คชื่อ */}
+               <div id="pdf-report-container" className="font-sarabun text-slate-800">
+                    <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #8b5cf6', paddingBottom: '10px', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', padding: '10px 12px', borderRadius: '10px', color: 'white' }}>
+                                <i className="fas fa-clipboard-list" style={{ fontSize: '20px' }}></i>
+                            </div>
+                            <div>
+                                <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#4c1d95', margin: '0' }}>รายงานการเข้าแถวหน้าเสาธง</h1>
+                                <h2 style={{ fontSize: '15px', color: '#6d28d9', margin: '0', marginTop: '2px' }}>ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: 'right', fontSize: '12px', color: '#5b21b6' }}>
+                            <p style={{ margin: '0', fontWeight: 'bold' }}>
+                                {reportDateList.length === 1 
+                                    ? `ประจำวันที่: ${formatDateObj(reportDateList[0])}` 
+                                    : `ช่วงวันที่: ${formatDateObj(reportDateList[0])} ถึง ${formatDateObj(reportDateList[reportDateList.length-1])}`}
+                            </p>
+                        </div>
+                    </div>
 
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      <table className="pdf-table" style={{ height: '100%', width: '100%' }}>
-                        <thead>
-                          <tr>
-                            <th style={{width: '8%', padding: pdfStyles.padding}}>เลขที่</th>
-                            <th style={{width: reportDateList.length === 1 ? '52%' : '47%', padding: pdfStyles.padding}}>ชื่อ - สกุล</th>
-                            {reportDateList.length === 1 ? (
-                                <>
-                                <th style={{width: '15%', padding: pdfStyles.padding}}>สถานะ</th>
-                                <th style={{width: '25%', padding: pdfStyles.padding}}>หมายเหตุ</th>
-                                </>
-                            ) : (
-                                <>
-                                <th style={{width: '15%', padding: pdfStyles.padding}}>มา (วัน)</th>
-                                <th style={{width: '15%', padding: pdfStyles.padding}}>ขาด (วัน)</th>
-                                <th style={{width: '15%', padding: pdfStyles.padding}}>ลา (วัน)</th>
-                                </>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                            {exportList.length === 0 ? <tr><td colSpan={reportDateList.length === 1 ? 4 : 5} style={{padding: '20px !important'}}>ไม่มีข้อมูลนักเรียนตามเงื่อนไข</td></tr> : 
-                            exportList.map((s) => {
-                               const isNotActive = (s.status === 'moved' || s.status === 'none');
-                               
-                               if (reportDateList.length === 1) {
-                                   const dayData = getAttendanceForDate(reportDateList[0]);
-                                   let label = ''; let textColor = '#1f2937'; let note = '';
-                                   
-                                   if (isNotActive) {
-                                       label = '-'; textColor = '#cbd5e1'; note = s.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน';
-                                   } else if (dayData && dayData[s.id]) {
-                                       const st = dayData[s.id];
-                                       if (st === 'present') { label = '✓'; textColor = '#10b981'; } 
-                                       else if (st === 'absent') { label = 'ข'; textColor = '#ef4444'; } 
-                                       else if (st === 'excused') { label = 'ล'; textColor = '#3b82f6'; } 
-                                       
-                                       const dRec = records.find(r => r.date === reportDateList[0]);
-                                       if (dRec?.notes?.[s.id]) note = dRec.notes[s.id];
-                                       else if (tempNotes[s.id]) note = tempNotes[s.id];
-                                   }
-                                   return (
-                                       <tr key={s.id} style={{ height: pdfStyles.rowHeight }}>
-                                           <td style={{ color: '#6b7280', fontWeight: 'bold', padding: pdfStyles.padding, fontSize: pdfStyles.fontSize }}>{s.number}</td>
-                                           <td className="text-left-pdf" style={{ padding: pdfStyles.padding, fontSize: pdfStyles.fontSize }}>{s.name}</td>
-                                           <td style={{ fontWeight: '900', fontSize: '14px', color: textColor, padding: pdfStyles.padding }}>{label}</td>
-                                           <td style={{fontSize: pdfStyles.fontSize, color: '#64748b', fontWeight: '600', padding: pdfStyles.padding}}>{note}</td>
-                                       </tr>
-                                   )
-                               } else {
-                                   let p = 0, a = 0, e = 0;
-                                   reportDateList.forEach(date => {
-                                       const dayData = getAttendanceForDate(date);
-                                       if (dayData && dayData[s.id]) {
-                                           const st = dayData[s.id];
-                                           if (st === 'present') p++;
-                                           if (st === 'absent') a++;
-                                           if (st === 'excused') e++;
-                                       }
-                                   });
-                                   return (
-                                       <tr key={s.id} style={{ height: pdfStyles.rowHeight }}>
-                                           <td style={{ color: '#6b7280', fontWeight: 'bold', padding: pdfStyles.padding, fontSize: pdfStyles.fontSize }}>{s.number}</td>
-                                           <td className="text-left-pdf" style={{ padding: pdfStyles.padding, fontSize: pdfStyles.fontSize }}>{s.name} {isNotActive ? `(${s.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน'})` : ''}</td>
-                                           <td style={{ fontWeight: 'bold', fontSize: '13px', color: '#10b981', padding: pdfStyles.padding }}>{isNotActive ? '-' : p}</td>
-                                           <td style={{ fontWeight: 'bold', fontSize: '13px', color: '#ef4444', padding: pdfStyles.padding }}>{isNotActive ? '-' : a}</td>
-                                           <td style={{ fontWeight: 'bold', fontSize: '13px', color: '#3b82f6', padding: pdfStyles.padding }}>{isNotActive ? '-' : e}</td>
-                                       </tr>
-                                   )
-                               }
-                            })}
-                        </tbody>
-                      </table>
-                  </div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <table className="pdf-table" style={{ width: '100%' }}>
+                          <thead>
+                            <tr>
+                              <th style={{width: '8%', padding: pdfStyles.padding}}>เลขที่</th>
+                              <th style={{width: '15%', padding: pdfStyles.padding}}>รหัส</th>
+                              <th style={{width: reportDateList.length === 1 ? '42%' : '37%', padding: pdfStyles.padding}}>ชื่อ - สกุล</th>
+                              {reportDateList.length === 1 ? (
+                                  <>
+                                  <th style={{width: '12%', padding: pdfStyles.padding}}>สถานะ</th>
+                                  <th style={{width: '23%', padding: pdfStyles.padding}}>หมายเหตุ</th>
+                                  </>
+                              ) : (
+                                  <>
+                                  <th style={{width: '13.3%', padding: pdfStyles.padding}}>มา (วัน)</th>
+                                  <th style={{width: '13.3%', padding: pdfStyles.padding}}>ขาด (วัน)</th>
+                                  <th style={{width: '13.3%', padding: pdfStyles.padding}}>ลา (วัน)</th>
+                                  </>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody>
+                              {exportList.length === 0 ? <tr><td colSpan={reportDateList.length === 1 ? 5 : 6} style={{padding: '20px !important'}}>ไม่มีข้อมูลนักเรียนตามเงื่อนไข</td></tr> : 
+                              exportList.map((s) => {
+                                 const isNotActive = (s.status === 'moved' || s.status === 'none');
+                                 
+                                 if (reportDateList.length === 1) {
+                                     const dayData = getAttendanceForDate(reportDateList[0]);
+                                     let label = ''; let textColor = '#1f2937'; let note = '';
+                                     
+                                     if (isNotActive) {
+                                         label = '-'; textColor = '#cbd5e1'; note = s.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน';
+                                     } else if (dayData && dayData[s.id]) {
+                                         const st = dayData[s.id];
+                                         if (st === 'present') { label = '✓'; textColor = '#10b981'; } 
+                                         else if (st === 'absent') { label = 'ข'; textColor = '#ef4444'; } 
+                                         else if (st === 'excused') { label = 'ล'; textColor = '#3b82f6'; } 
+                                         
+                                         const dRec = records.find(r => r.date === reportDateList[0]);
+                                         if (dRec?.notes?.[s.id]) note = dRec.notes[s.id];
+                                         else if (tempNotes[s.id]) note = tempNotes[s.id];
+                                     }
+                                     return (
+                                         <tr key={s.id} style={{ height: pdfStyles.rowHeight }}>
+                                             <td style={{ color: '#6b7280', fontWeight: 'bold', padding: pdfStyles.padding, fontSize: pdfStyles.fontSize }}>{s.number}</td>
+                                             <td style={{ color: '#64748b', fontSize: '13px', padding: pdfStyles.padding }}>{s.id}</td>
+                                             <td className="text-left-pdf" style={{ padding: pdfStyles.padding, fontSize: pdfStyles.fontSize }}>{s.name}</td>
+                                             <td style={{ fontWeight: '900', fontSize: '14px', color: textColor, padding: pdfStyles.padding }}>{label}</td>
+                                             <td style={{fontSize: pdfStyles.fontSize, color: '#64748b', fontWeight: '600', padding: pdfStyles.padding}}>{note}</td>
+                                         </tr>
+                                     )
+                                 } else {
+                                     let p = 0, a = 0, e = 0;
+                                     reportDateList.forEach(date => {
+                                         const dayData = getAttendanceForDate(date);
+                                         if (dayData && dayData[s.id]) {
+                                             const st = dayData[s.id];
+                                             if (st === 'present') p++;
+                                             if (st === 'absent') a++;
+                                             if (st === 'excused') e++;
+                                         }
+                                     });
+                                     return (
+                                         <tr key={s.id} style={{ height: pdfStyles.rowHeight }}>
+                                             <td style={{ color: '#6b7280', fontWeight: 'bold', padding: pdfStyles.padding, fontSize: pdfStyles.fontSize }}>{s.number}</td>
+                                             <td style={{ color: '#64748b', fontSize: '13px', padding: pdfStyles.padding }}>{s.id}</td>
+                                             <td className="text-left-pdf" style={{ padding: pdfStyles.padding, fontSize: pdfStyles.fontSize }}>{s.name} {isNotActive ? `(${s.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน'})` : ''}</td>
+                                             <td style={{ fontWeight: 'bold', fontSize: '13px', color: '#10b981', padding: pdfStyles.padding }}>{isNotActive ? '-' : p}</td>
+                                             <td style={{ fontWeight: 'bold', fontSize: '13px', color: '#ef4444', padding: pdfStyles.padding }}>{isNotActive ? '-' : a}</td>
+                                             <td style={{ fontWeight: 'bold', fontSize: '13px', color: '#3b82f6', padding: pdfStyles.padding }}>{isNotActive ? '-' : e}</td>
+                                         </tr>
+                                     )
+                                 }
+                              })}
+                          </tbody>
+                        </table>
+                    </div>
+               </div>
+               
+               {/* 2. PDF บัตรนักเรียนแนวนอน (หน้าละ 8 ใบ ขนาดมาตรฐาน 8.5x5.4 cm) */}
+               <div id="pdf-qr-container" className="font-sarabun text-slate-800" style={{ backgroundColor: 'white' }}>
+                    {cardChunks.map((chunk, chunkIndex) => (
+                        <div key={chunkIndex} className={`pdf-page-chunk ${chunkIndex > 0 ? 'page-break' : ''}`}>
+                            <div className="text-center mb-6 pb-2 border-b-2 border-violet-500 shrink-0">
+                                <h1 className="text-[24px] font-bold text-violet-900">บัตรประจำตัวนักเรียนสำหรับเช็คชื่อ</h1>
+                                <h2 className="text-[16px] text-violet-700">ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
+                            </div>
+                            
+                            <div className="flex-1 content-start" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                {chunk.map(s => (
+                                    <div key={s.id} style={{ width: '335px', height: '210px' }} className="border-2 border-slate-300 rounded-xl overflow-hidden flex bg-white box-border relative">
+                                        <div style={{ width: '35%' }} className="bg-slate-50 border-r-2 border-slate-200 flex flex-col items-center p-2 relative">
+                                            <div style={{ width: '85px', height: '110px' }} className="bg-white border border-slate-300 rounded-md overflow-hidden flex items-center justify-center shadow-sm mt-3 shrink-0">
+                                                {s.image ? <img src={s.image} className="w-full h-full object-cover" /> : <i className="fas fa-user text-slate-300 text-4xl"></i>}
+                                            </div>
+                                            <div className="bg-violet-600 text-white text-[13px] font-bold text-center py-1 absolute bottom-0 w-full">
+                                                เลขที่ {s.number}
+                                            </div>
+                                        </div>
+                                        <div style={{ width: '65%' }} className="p-3 flex flex-col justify-between">
+                                            <div>
+                                                {/* ใส่ระบบตัดคำ (line-clamp-2) เผื่อชื่อยาวมาก จะได้ไม่ทับส่วนอื่น */}
+                                                <h3 className="font-bold text-slate-800 text-[15px] leading-tight mb-1 line-clamp-2">{s.name}</h3>
+                                                <p className="text-slate-500 font-bold text-[12px] mb-0.5 truncate">รหัส: {s.id}</p>
+                                                <p className="text-violet-600 font-bold text-[12px]">ห้อง: {settings.roomName}</p>
+                                            </div>
+                                            <div className="self-end mt-auto border-2 border-slate-200 p-1.5 rounded-lg shadow-sm shrink-0">
+                                                <QRCodeCanvas text={s.id} size={70} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+               </div>
 
-                  <div style={{ flexShrink: 0, marginTop: 'auto', paddingTop: '10px', display: 'flex', justifyContent: 'flex-start' }}>
-                      <div style={{ fontSize: '12px', color: '#4c1d95', backgroundColor: '#f3e8ff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #d8b4fe' }}>
-                          <b>คำอธิบาย:</b> <span style={{color: '#10b981', fontWeight: 'bold'}}>✓ มา</span>, <span style={{color: '#ef4444', fontWeight: 'bold'}}>ข ขาด</span>, <span style={{color: '#3b82f6', fontWeight: 'bold'}}>ล ลา</span>
-                      </div>
-                  </div>
-             </div>
-             
-             {/* ----------------- โครงสร้างบัตรนักเรียนรวม แนวนอน (หน้าละ 8 ใบ) ----------------- */}
-             <div id="pdf-qr-container" className="font-sarabun text-slate-800" style={{ position: 'absolute', left: '-9999px', top: 0, backgroundColor: 'white' }}>
-                  {cardChunks.map((chunk, chunkIndex) => (
-                      <div key={chunkIndex} className={`pdf-page-chunk ${chunkIndex > 0 ? 'page-break' : ''}`}>
-                          <div className="text-center mb-6 pb-2 border-b-2 border-violet-500 shrink-0">
-                              <h1 className="text-[26px] font-bold text-violet-900">บัตรประจำตัวนักเรียนสำหรับเช็คชื่อ</h1>
-                              <h2 className="text-[18px] text-violet-700">ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-6 flex-1 content-start">
-                              {chunk.map(s => (
-                                  <div key={s.id} className="border-2 border-slate-300 rounded-xl overflow-hidden flex h-[210px] shadow-sm bg-white">
-                                      <div className="w-[140px] bg-slate-50 flex-shrink-0 border-r-2 border-slate-200 flex flex-col relative">
-                                          <div className="flex-1 flex items-center justify-center p-3">
-                                              {s.image ? <img src={s.image} className="w-full h-full object-cover rounded-md border border-slate-200" /> : <i className="fas fa-user text-slate-300 text-6xl"></i>}
-                                          </div>
-                                          <div className="bg-violet-600 text-white text-[14px] font-bold text-center py-1.5 absolute bottom-0 w-full">
-                                              เลขที่ {s.number}
-                                          </div>
-                                      </div>
-                                      <div className="flex-1 p-4 flex flex-col justify-center relative">
-                                          <div className="pr-20">
-                                              <h3 className="font-bold text-slate-800 text-[18px] leading-tight mb-2">{s.name}</h3>
-                                              <p className="text-slate-500 font-bold text-[13px] mb-1">รหัส: {s.id}</p>
-                                              <p className="text-violet-600 font-bold text-[13px]">ห้อง: {settings.roomName}</p>
-                                          </div>
-                                          <div className="absolute right-4 top-1/2 -translate-y-1/2 border-2 border-slate-200 p-2 rounded-xl bg-white shadow-sm">
-                                              <QRCodeCanvas text={s.id} size={90} />
-                                          </div>
-                                      </div>
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                  ))}
-             </div>
            </div>
 
            {/* Bottom Navigation */}
@@ -1273,3 +1314,4 @@
   </script>
 </body>
 </html>
+
