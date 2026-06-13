@@ -41,9 +41,9 @@
     .pdf-table tbody tr:nth-child(odd) { background-color: #ffffff; }
     .text-left-pdf { text-align: left !important; padding-left: 10px !important; font-weight: 600; color: #4c1d95; }
     
-    /* PDF Student ID Card Layout แนวนอน - หน้าละ 10 ใบ */
+    /* PDF Student ID Card Layout แนวนอน - หน้าละ 8 ใบ */
     .page-break { page-break-before: always; }
-    .pdf-page-chunk { width: 794px; height: 1123px; padding: 25px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
+    .pdf-page-chunk { width: 794px; height: 1123px; padding: 25px 30px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
     
     .donut-chart { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.2s; }
     .donut-chart:hover { transform: scale(1.05); }
@@ -60,7 +60,7 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     // ==========================================
-    // 🔗 ลิงก์ API หลังบ้านของคุณ (GAS)
+    // ลิงก์ API หลังบ้าน (GAS)
     // ==========================================
     const GOOGLE_APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwVFk7ASZJ4KzyipPtBWl5fxrSZvpqj1EjrFcCJi3QD9mw48yBnlOxD_hgsjBXULzhaLg/exec"; 
 
@@ -77,7 +77,7 @@
       }
     };
     const playSound = (type, soundEnabled = true) => {
-      if (!soundEnabled) return; // ถ้าปิดเสียงไว้ จะไม่ทำงาน
+      if (!soundEnabled) return; 
       try {
         if (!globalAudioContext) return;
         const ctx = globalAudioContext; if (ctx.state === 'suspended') ctx.resume();
@@ -116,7 +116,7 @@
         return <canvas ref={qrRef} className="rounded-lg shadow-sm border border-slate-100"></canvas>;
     };
 
-    const initialSettings = { roomName: "ม.1/1", soundEnabled: true }; // ลบผู้ตรวจและลายเซ็นออก
+    const initialSettings = { roomName: "ม.1/1", soundEnabled: true };
 
     function App() {
       const [activeTab, setActiveTab] = useState('check'); 
@@ -138,6 +138,7 @@
       const [tempNotes, setTempNotes] = useState({}); 
       const [isLocked, setIsLocked] = useState(false); 
       const [isSyncing, setIsSyncing] = useState(false);
+      const [searchQuery, setSearchQuery] = useState('');
 
       const [reportStartDate, setReportStartDate] = useState(() => new Date().toISOString().split('T')[0]);
       const [reportEndDate, setReportEndDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -145,7 +146,7 @@
       const [exportFilter, setExportFilter] = useState('all'); 
       const [isExporting, setIsExporting] = useState(false);
       const [isGeneratingDoc, setIsGeneratingDoc] = useState('');
-      const [showChartDetails, setShowChartDetails] = useState(false); // Modal ดูกราฟ
+      const [showChartDetails, setShowChartDetails] = useState(false); 
 
       const [tempSettings, setTempSettings] = useState(settings);
       const [bulkIds, setBulkIds] = useState('');
@@ -226,7 +227,6 @@
       const startScanner = () => {
           if (!html5QrCodeRef.current) html5QrCodeRef.current = new Html5Qrcode("reader");
           if (!scannerActive) {
-              // ขยายกรอบสแกนให้ใหญ่ขึ้น
               const screenWidth = window.innerWidth;
               const qrboxSize = screenWidth > 500 ? 300 : 250;
               
@@ -250,7 +250,6 @@
           if (isLocked) { showToast('ล็อคการเช็คชื่ออยู่ กรุณาปลดล็อค'); return; }
           const student = students.find(s => s.id === decodedText.trim()); 
           if (student) {
-              // เช็คว่าถ้ามาแล้ว ให้เงียบ ไม่ต้องดังซ้ำ
               if (attendance[student.id] === 'present') {
                   setLastScanned(student);
                   setTimeout(() => setLastScanned(null), 2500);
@@ -290,10 +289,10 @@
           setNotes(tempNotes); 
           setIsLocked(true); 
           syncDataToCloud('saveAttendance', newRecord);
-          showToast('บันทึกและล็อคข้อมูลเรียบร้อย! 🔒');
+          showToast('บันทึกและล็อคข้อมูลเรียบร้อย');
       };
 
-      const unlockAttendance = () => { initAudio(); playSound('tap', settings.soundEnabled); setIsLocked(false); showToast('ปลดล็อคแล้ว สามารถแก้ไขได้ 🔓'); };
+      const unlockAttendance = () => { initAudio(); playSound('tap', settings.soundEnabled); setIsLocked(false); showToast('ปลดล็อคแล้ว สามารถแก้ไขได้'); };
 
       const currentSummary = useMemo(() => {
           let p = 0, a = 0, e = 0, totalActive = 0;
@@ -326,6 +325,23 @@
       const reportDateList = useMemo(() => getDatesBetween(reportStartDate, reportEndDate), [reportStartDate, reportEndDate]);
       
       const sortedStudents = useMemo(() => [...students].sort((a,b)=>a.number-b.number), [students]);
+      
+      // ค้นหานักเรียนในหน้าเช็คชื่อ
+      const filteredCheckStudents = useMemo(() => {
+          if (!searchQuery.trim()) return sortedStudents;
+          return sortedStudents.filter(s => 
+              s.name.includes(searchQuery) || 
+              s.id.includes(searchQuery) || 
+              s.number.toString() === searchQuery.trim()
+          );
+      }, [sortedStudents, searchQuery]);
+
+      // ดึงข้อมูลเช็คชื่อมาคำนวณ (ใช้ข้อมูลแบบเรียลไทม์ถ้าเป็นวันปัจจุบัน)
+      const getAttendanceForDate = (date) => {
+          if (date === currentDate) return attendance;
+          const rec = records.find(r => r.date === date);
+          return rec ? rec.data : null;
+      };
 
       const getStudentsForExport = () => {
           let list = [...sortedStudents];
@@ -335,8 +351,8 @@
               if (s.status === 'moved' || s.status === 'none') return true; 
               let match = false;
               for (const date of reportDateList) {
-                  const dRec = records.find(r => r.date === date);
-                  const st = dRec?.data?.[s.id];
+                  const dayData = getAttendanceForDate(date);
+                  const st = dayData ? dayData[s.id] : null;
                   if (exportFilter === 'present' && st === 'present') match = true;
                   if (exportFilter === 'absent' && st === 'absent') match = true;
                   if (exportFilter === 'excused' && st === 'excused') match = true;
@@ -352,11 +368,11 @@
       const reportSummary = useMemo(() => {
           let p = 0, a = 0, e = 0;
           reportDateList.forEach(date => {
-              const dRec = records.find(r => r.date === date);
-              if (dRec) {
+              const dayData = getAttendanceForDate(date);
+              if (dayData) {
                   students.forEach(s => {
                       if (!s.status || s.status === 'active') {
-                          const st = dRec?.data?.[s.id];
+                          const st = dayData[s.id];
                           if(st === 'present') p++;
                           if(st === 'absent') a++;
                           if(st === 'excused') e++;
@@ -366,7 +382,7 @@
           });
           const total = p + a + e;
           return { p, a, e, total };
-      }, [reportDateList, records, students]);
+      }, [reportDateList, records, students, attendance, currentDate]);
 
       const getDonutStyle = () => {
           const total = reportSummary.total;
@@ -379,9 +395,9 @@
       const getIndividualStats = (studentId) => {
           let p = 0, a = 0, e = 0;
           reportDateList.forEach(date => {
-              const r = records.find(rec => rec.date === date);
-              if (r) {
-                  const st = r?.data?.[studentId];
+              const dayData = getAttendanceForDate(date);
+              if (dayData) {
+                  const st = dayData[studentId];
                   if (st === 'present') p++;
                   if (st === 'absent') a++;
                   if (st === 'excused') e++;
@@ -395,9 +411,10 @@
           initAudio(); playSound('success', tempSettings.soundEnabled); 
           setSettings(tempSettings); 
           syncDataToCloud('saveSettings', tempSettings);
-          showToast('บันทึกการตั้งค่าแล้ว 💾');
+          showToast('บันทึกการตั้งค่าแล้ว');
       };
 
+      // แปลงรูปภาพเป็น Base64 และบีบอัดก่อนบันทึกลงระบบ
       const handleImageUpload = (e, studentId) => {
           const file = e.target.files[0];
           if(!file) return;
@@ -405,35 +422,30 @@
           const reader = new FileReader();
           reader.onload = (event) => {
               const img = new Image();
-              img.onload = async () => {
-                  const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-                  const MAX_SIZE = 300; let width = img.width; let height = img.height;
+              img.onload = () => {
+                  const canvas = document.createElement('canvas'); 
+                  const ctx = canvas.getContext('2d');
+                  const MAX_SIZE = 150; // บีบอัดเหลือ 150px เพื่อให้เซฟลง Sheets ได้ง่าย
+                  let width = img.width; 
+                  let height = img.height;
+                  
                   if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
                   else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
-                  canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
-                  const base64Data = canvas.toDataURL('image/jpeg', 0.8);
                   
-                  setStudents(prev => prev.map(s => s.id === studentId ? { ...s, image: base64Data } : s));
+                  canvas.width = width; canvas.height = height; 
+                  ctx.drawImage(img, 0, 0, width, height);
                   
-                  if(GOOGLE_APP_SCRIPT_URL) {
-                      try {
-                          const res = await fetch(GOOGLE_APP_SCRIPT_URL, {
-                              method: 'POST',
-                              body: JSON.stringify({ action: 'uploadImage', payload: { studentId, base64: base64Data } })
-                          });
-                          const json = await res.json();
-                          if(json && json.status === 'success' && json.data.imageUrl) {
-                              const newImage = json.data.imageUrl;
-                              setStudents(prev => {
-                                  const updated = prev.map(s => s.id === studentId ? { ...s, image: newImage } : s);
-                                  syncDataToCloud('saveStudents', updated);
-                                  return updated;
-                              });
-                          }
-                      } catch (err) {}
-                  }
-
-                  setImageUploadingId(null); showToast('อัปโหลดรูปภาพสำเร็จ');
+                  // คุณภาพ 50% ทำให้ได้ไฟล์ที่เล็กมาก
+                  const base64Data = canvas.toDataURL('image/jpeg', 0.5); 
+                  
+                  setStudents(prev => {
+                      const updated = prev.map(s => s.id === studentId ? { ...s, image: base64Data } : s);
+                      syncDataToCloud('saveStudents', updated);
+                      return updated;
+                  });
+                  
+                  setImageUploadingId(null); 
+                  showToast('อัปโหลดรูปลงระบบสำเร็จ');
               };
               img.src = event.target.result;
           };
@@ -512,12 +524,12 @@
                   let isNotActive = (s.status === 'moved' || s.status === 'none');
                   
                   reportDateList.forEach(date => {
-                      const dRec = records.find(r => r.date === date);
+                      const dayData = getAttendanceForDate(date);
                       let label = '';
                       if (isNotActive) { label = '-'; } 
-                      else if (dRec?.data?.[s.id]) {
-                          const st = dRec.data[s.id];
-                          label = st === 'present' ? '✓' : st === 'absent' ? 'ข' : 'ล';
+                      else if (dayData && dayData[s.id]) {
+                          const st = dayData[s.id];
+                          label = st === 'present' ? 'มา' : st === 'absent' ? 'ขาด' : 'ลา';
                       }
                       rowData[formatShortDate(date)] = label;
                   });
@@ -544,8 +556,9 @@
           if (!arr || arr.length === 0) return [];
           return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
       };
+      
       const cardsToPrint = sortedStudents.filter(s => selectedForPrint.includes(s.id));
-      const cardChunks = chunkArray(cardsToPrint, 10); // แบ่งหน้าละ 10 ใบ (แนวนอน 2 แถว 5 บรรทัด)
+      const cardChunks = chunkArray(cardsToPrint, 8); // แบ่งหน้าละ 8 ใบ (แนวนอน 2 แถว 4 บรรทัด) ขนาดจะใหญ่กำลังดี
 
       const executeExport = async (type) => {
           initAudio(); playSound('tap', settings.soundEnabled); setIsExporting(true); setIsGeneratingDoc(type); 
@@ -714,14 +727,13 @@
                             <h3 className="text-slate-800 font-bold mb-2 flex items-center gap-2">
                                 <i className="fas fa-camera text-violet-500"></i> สแกน QR Code ในบัตร
                             </h3>
-                            {/* ขยายกรอบสแกนให้ใหญ่ขึ้น */}
                             <div className="w-full max-w-md aspect-square relative rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-violet-300">
                                 <div id="reader" className="w-full h-full"></div>
                                 {!scannerActive && <div className="absolute inset-0 flex items-center justify-center text-slate-400 font-medium">กำลังเปิดกล้อง...</div>}
                             </div>
                             {lastScanned && (
                                 <div className="mt-4 bg-emerald-50 text-emerald-700 px-6 py-2 rounded-full font-bold border border-emerald-200 animate-in zoom-in">
-                                    <i className="fas fa-check-circle mr-1"></i> {lastScanned.name} มาเรียน!
+                                    <i className="fas fa-check-circle mr-1"></i> {lastScanned.name} มาเรียน
                                 </div>
                             )}
                         </div>
@@ -754,70 +766,89 @@
                                 </button>
                             ) : (
                                 <button onClick={saveAttendance} className="flex-[1.5] py-3 text-sm font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl shadow-lg shadow-violet-200 active:scale-95 transition-all">
-                                    <i className="fas fa-save mr-1"></i> บันทึกและล็อค 🔒
+                                    <i className="fas fa-save mr-1"></i> บันทึกและล็อค
                                 </button>
                             )}
                         </div>
                     </div>
 
+                    {/* ช่องค้นหา */}
+                    <div className="bg-white rounded-xl px-4 py-3 shadow-sm border border-slate-200 flex items-center gap-3">
+                        <i className="fas fa-search text-slate-400"></i>
+                        <input 
+                            type="text" 
+                            placeholder="ค้นหาชื่อ หรือเลขประจำตัว..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="flex-1 outline-none text-sm font-medium text-slate-700 bg-transparent placeholder:text-slate-400"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times-circle"></i></button>
+                        )}
+                    </div>
+
                     <div className="space-y-3">
-                        {sortedStudents.map(student => {
-                            const isActive = (!student.status || student.status === 'active');
-                            const status = attendance[student.id] || 'present';
-                            const studentNote = tempNotes[student.id] || '';
-                            
-                            return (
-                                <div key={student.id} className={`flex flex-col p-3 sm:p-4 rounded-2xl border shadow-sm gap-3 transition-colors ${!isActive ? 'bg-slate-50 border-slate-200 opacity-60' : isLocked ? 'bg-slate-50/50 border-slate-100' : 'bg-white border-violet-100'}`}>
-                                    
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                        <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0">
-                                            <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center font-black text-xs border mt-1 sm:mt-0 ${isActive && !isLocked ? 'bg-violet-100 text-violet-600 border-violet-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
-                                                {student.number}
-                                            </div>
-                                            
-                                            <div className="shrink-0">
-                                                {student.image ? (
-                                                    <img src={student.image} className={`w-12 h-14 sm:w-14 sm:h-16 rounded-xl object-cover border-2 shadow-sm ${isActive && !isLocked ? 'border-violet-200' : 'border-slate-200'}`} alt="profile"/>
-                                                ) : (
-                                                    <div className={`w-12 h-14 sm:w-14 sm:h-16 rounded-xl flex items-center justify-center border-2 border-dashed ${isActive && !isLocked ? 'bg-violet-50/50 border-violet-200 text-violet-300' : 'bg-slate-50 border-slate-200 text-slate-300'}`}>
-                                                        <i className="fas fa-user text-lg"></i>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div className="flex-1 min-w-0 flex flex-col justify-center min-h-[3.5rem]">
-                                                <p className={`font-bold text-sm sm:text-base leading-tight truncate ${isActive ? (isLocked ? 'text-slate-600' : 'text-slate-800') : 'text-slate-400 line-through'}`}>
-                                                    {student.name} {isActive ? '' : <span className="text-[10px] font-normal inline sm:hidden">({student.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน'})</span>}
-                                                </p>
-                                                {!isActive && <p className="text-[10px] font-normal text-slate-400 hidden sm:block">({student.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน'})</p>}
+                        {filteredCheckStudents.length === 0 ? (
+                            <div className="text-center py-8 text-slate-500 font-medium">ไม่พบรายชื่อที่ค้นหา</div>
+                        ) : (
+                            filteredCheckStudents.map(student => {
+                                const isActive = (!student.status || student.status === 'active');
+                                const status = attendance[student.id] || 'present';
+                                const studentNote = tempNotes[student.id] || '';
+                                
+                                return (
+                                    <div key={student.id} className={`flex flex-col p-3 sm:p-4 rounded-2xl border shadow-sm gap-3 transition-colors ${!isActive ? 'bg-slate-50 border-slate-200 opacity-60' : isLocked ? 'bg-slate-50/50 border-slate-100' : 'bg-white border-violet-100'}`}>
+                                        
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0">
+                                                <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center font-black text-xs border mt-1 sm:mt-0 ${isActive && !isLocked ? 'bg-violet-100 text-violet-600 border-violet-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                                                    {student.number}
+                                                </div>
                                                 
-                                                {/* หมายเหตุ */}
-                                                {isActive && (status === 'absent' || status === 'excused') && (
-                                                    <div className="mt-1.5 flex items-center gap-1.5 animate-in fade-in">
-                                                        <i className="fas fa-comment-dots text-slate-300 text-[10px]"></i>
-                                                        <input 
-                                                            type="text" placeholder="พิมพ์เหตุผล..." 
-                                                            value={studentNote} onChange={(e) => setTempNotes(prev => ({...prev, [student.id]: e.target.value}))} disabled={isLocked}
-                                                            className="flex-1 bg-transparent border-b border-slate-200 text-xs text-slate-600 outline-none pb-0.5 focus:border-violet-400 placeholder:text-slate-300"
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
+                                                <div className="shrink-0">
+                                                    {student.image ? (
+                                                        <img src={student.image} className={`w-12 h-14 sm:w-14 sm:h-16 rounded-xl object-cover border-2 shadow-sm ${isActive && !isLocked ? 'border-violet-200' : 'border-slate-200'}`} alt="profile"/>
+                                                    ) : (
+                                                        <div className={`w-12 h-14 sm:w-14 sm:h-16 rounded-xl flex items-center justify-center border-2 border-dashed ${isActive && !isLocked ? 'bg-violet-50/50 border-violet-200 text-violet-300' : 'bg-slate-50 border-slate-200 text-slate-300'}`}>
+                                                            <i className="fas fa-user text-lg"></i>
+                                                        </div>
+                                                    )}
+                                                </div>
 
-                                        {isActive ? (
-                                            <div className={`flex shrink-0 p-1 rounded-xl border shadow-inner mt-2 sm:mt-0 ${isLocked ? 'bg-slate-100 border-slate-200 opacity-80' : 'bg-slate-50 border-slate-200'}`}>
-                                                <button onClick={() => setStatusDirectly(student.id, 'present')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'present' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='present' ? 'opacity-50' : ''}`}>มา</button>
-                                                <button onClick={() => setStatusDirectly(student.id, 'absent')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'absent' ? 'bg-red-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='absent' ? 'opacity-50' : ''}`}>ขาด</button>
-                                                <button onClick={() => setStatusDirectly(student.id, 'excused')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'excused' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='excused' ? 'opacity-50' : ''}`}>ลา</button>
+                                                <div className="flex-1 min-w-0 flex flex-col justify-center min-h-[3.5rem]">
+                                                    <p className={`font-bold text-sm sm:text-base leading-tight truncate ${isActive ? (isLocked ? 'text-slate-600' : 'text-slate-800') : 'text-slate-400 line-through'}`}>
+                                                        {student.name} {isActive ? '' : <span className="text-[10px] font-normal inline sm:hidden">({student.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน'})</span>}
+                                                    </p>
+                                                    {!isActive && <p className="text-[10px] font-normal text-slate-400 hidden sm:block">({student.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน'})</p>}
+                                                    
+                                                    {/* หมายเหตุ */}
+                                                    {isActive && (status === 'absent' || status === 'excused') && (
+                                                        <div className="mt-1.5 flex items-center gap-1.5 animate-in fade-in">
+                                                            <i className="fas fa-comment-dots text-slate-300 text-[10px]"></i>
+                                                            <input 
+                                                                type="text" placeholder="พิมพ์เหตุผล..." 
+                                                                value={studentNote} onChange={(e) => setTempNotes(prev => ({...prev, [student.id]: e.target.value}))} disabled={isLocked}
+                                                                className="flex-1 bg-transparent border-b border-slate-200 text-xs text-slate-600 outline-none pb-0.5 focus:border-violet-400 placeholder:text-slate-300"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                        ) : (
-                                            <div className="text-xs font-bold text-slate-400 bg-slate-100 px-4 py-2 rounded-lg text-center border border-slate-200 shrink-0 mt-2 sm:mt-0">ข้ามการเช็คชื่อ</div>
-                                        )}
+
+                                            {isActive ? (
+                                                <div className={`flex shrink-0 p-1 rounded-xl border shadow-inner mt-2 sm:mt-0 ${isLocked ? 'bg-slate-100 border-slate-200 opacity-80' : 'bg-slate-50 border-slate-200'}`}>
+                                                    <button onClick={() => setStatusDirectly(student.id, 'present')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'present' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='present' ? 'opacity-50' : ''}`}>มา</button>
+                                                    <button onClick={() => setStatusDirectly(student.id, 'absent')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'absent' ? 'bg-red-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='absent' ? 'opacity-50' : ''}`}>ขาด</button>
+                                                    <button onClick={() => setStatusDirectly(student.id, 'excused')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'excused' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='excused' ? 'opacity-50' : ''}`}>ลา</button>
+                                                </div>
+                                            ) : (
+                                                <div className="text-xs font-bold text-slate-400 bg-slate-100 px-4 py-2 rounded-lg text-center border border-slate-200 shrink-0 mt-2 sm:mt-0">ข้ามการเช็คชื่อ</div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })
+                        )}
                     </div>
                  </div>
               )}
@@ -956,7 +987,7 @@
                             <h2 className="text-lg font-black text-slate-800 flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-blue-100 text-blue-500 flex items-center justify-center"><i className="fas fa-users"></i></div> จัดการรายชื่อ ({students.length})</h2>
                             {students.length > 0 && (
                                 <button onClick={() => executeExport('pdf_qr_selected')} disabled={selectedForPrint.length === 0} className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                                    <i className="fas fa-print"></i> ปริ้นต์บัตรสีม่วงแนวนอน ({selectedForPrint.length})
+                                    <i className="fas fa-print"></i> ปริ้นต์บัตรสีม่วง ({selectedForPrint.length})
                                 </button>
                             )}
                         </div>
@@ -988,7 +1019,7 @@
                                     className="w-4 h-4 accent-violet-600 cursor-pointer" id="selectAllQR" 
                                 />
                                 <label htmlFor="selectAllQR" className="text-xs font-bold text-slate-600 cursor-pointer">เลือกพิมพ์บัตรทั้งหมด</label>
-                                <span className="text-[10px] text-slate-400 ml-auto">(ระบบจัดเรียงตามเลขที่อัตโนมัติ)</span>
+                                <span className="text-[10px] text-slate-400 ml-auto">(จัดเรียงตามเลขที่อัตโนมัติ)</span>
                             </div>
                         )}
 
@@ -1126,17 +1157,20 @@
                                const isNotActive = (s.status === 'moved' || s.status === 'none');
                                
                                if (reportDateList.length === 1) {
-                                   const dRec = records.find(r => r.date === reportDateList[0]);
+                                   const dayData = getAttendanceForDate(reportDateList[0]);
                                    let label = ''; let textColor = '#1f2937'; let note = '';
                                    
                                    if (isNotActive) {
                                        label = '-'; textColor = '#cbd5e1'; note = s.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน';
-                                   } else if (dRec?.data?.[s.id]) {
-                                       const st = dRec.data[s.id];
+                                   } else if (dayData && dayData[s.id]) {
+                                       const st = dayData[s.id];
                                        if (st === 'present') { label = '✓'; textColor = '#10b981'; } 
                                        else if (st === 'absent') { label = 'ข'; textColor = '#ef4444'; } 
                                        else if (st === 'excused') { label = 'ล'; textColor = '#3b82f6'; } 
+                                       
+                                       const dRec = records.find(r => r.date === reportDateList[0]);
                                        if (dRec?.notes?.[s.id]) note = dRec.notes[s.id];
+                                       else if (tempNotes[s.id]) note = tempNotes[s.id];
                                    }
                                    return (
                                        <tr key={s.id} style={{ height: pdfStyles.rowHeight }}>
@@ -1149,9 +1183,9 @@
                                } else {
                                    let p = 0, a = 0, e = 0;
                                    reportDateList.forEach(date => {
-                                       const dRec = records.find(r => r.date === date);
-                                       if (dRec?.data?.[s.id]) {
-                                           const st = dRec.data[s.id];
+                                       const dayData = getAttendanceForDate(date);
+                                       if (dayData && dayData[s.id]) {
+                                           const st = dayData[s.id];
                                            if (st === 'present') p++;
                                            if (st === 'absent') a++;
                                            if (st === 'excused') e++;
@@ -1179,34 +1213,34 @@
                   </div>
              </div>
              
-             {/* ----------------- โครงสร้างบัตรนักเรียนรวม แนวนอน (แบ่งหน้าด้วย Chunk หน้าละ 10 ใบ) ----------------- */}
+             {/* ----------------- โครงสร้างบัตรนักเรียนรวม แนวนอน (หน้าละ 8 ใบ) ----------------- */}
              <div id="pdf-qr-container" className="font-sarabun text-slate-800" style={{ position: 'absolute', left: '-9999px', top: 0, backgroundColor: 'white' }}>
                   {cardChunks.map((chunk, chunkIndex) => (
                       <div key={chunkIndex} className={`pdf-page-chunk ${chunkIndex > 0 ? 'page-break' : ''}`}>
                           <div className="text-center mb-6 pb-2 border-b-2 border-violet-500 shrink-0">
-                              <h1 className="text-[22px] font-bold text-violet-900">บัตรประจำตัวนักเรียนสำหรับเช็คชื่อ</h1>
-                              <h2 className="text-[15px] text-violet-700">ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
+                              <h1 className="text-[26px] font-bold text-violet-900">บัตรประจำตัวนักเรียนสำหรับเช็คชื่อ</h1>
+                              <h2 className="text-[18px] text-violet-700">ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
                           </div>
                           
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-4 flex-1 content-start">
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-6 flex-1 content-start">
                               {chunk.map(s => (
-                                  <div key={s.id} className="border-2 border-slate-300 rounded-xl overflow-hidden flex h-[160px]">
-                                      <div className="w-[110px] bg-slate-100 flex-shrink-0 border-r-2 border-slate-200 flex flex-col relative">
-                                          <div className="flex-1 flex items-center justify-center p-2 bg-white m-1.5 rounded-lg border border-slate-200">
-                                              {s.image ? <img src={s.image} className="w-full h-full object-cover rounded-md" /> : <i className="fas fa-user text-slate-300 text-4xl"></i>}
+                                  <div key={s.id} className="border-2 border-slate-300 rounded-xl overflow-hidden flex h-[210px] shadow-sm bg-white">
+                                      <div className="w-[140px] bg-slate-50 flex-shrink-0 border-r-2 border-slate-200 flex flex-col relative">
+                                          <div className="flex-1 flex items-center justify-center p-3">
+                                              {s.image ? <img src={s.image} className="w-full h-full object-cover rounded-md border border-slate-200" /> : <i className="fas fa-user text-slate-300 text-6xl"></i>}
                                           </div>
-                                          <div className="bg-violet-600 text-white text-[12px] font-bold text-center py-1 absolute bottom-0 w-full">
+                                          <div className="bg-violet-600 text-white text-[14px] font-bold text-center py-1.5 absolute bottom-0 w-full">
                                               เลขที่ {s.number}
                                           </div>
                                       </div>
-                                      <div className="flex-1 bg-white p-3 flex flex-col justify-center relative">
-                                          <div className="pr-16">
-                                              <h3 className="font-bold text-slate-800 text-[15px] leading-tight mb-1">{s.name}</h3>
-                                              <p className="text-slate-500 font-bold text-[11px]">รหัส: {s.id}</p>
-                                              <p className="text-violet-600 font-bold text-[11px] mt-0.5">ห้อง: {settings.roomName}</p>
+                                      <div className="flex-1 p-4 flex flex-col justify-center relative">
+                                          <div className="pr-20">
+                                              <h3 className="font-bold text-slate-800 text-[18px] leading-tight mb-2">{s.name}</h3>
+                                              <p className="text-slate-500 font-bold text-[13px] mb-1">รหัส: {s.id}</p>
+                                              <p className="text-violet-600 font-bold text-[13px]">ห้อง: {settings.roomName}</p>
                                           </div>
-                                          <div className="absolute right-3 top-1/2 -translate-y-1/2 border border-slate-200 p-1.5 rounded-xl bg-white shadow-sm">
-                                              <QRCodeCanvas text={s.id} size={70} />
+                                          <div className="absolute right-4 top-1/2 -translate-y-1/2 border-2 border-slate-200 p-2 rounded-xl bg-white shadow-sm">
+                                              <QRCodeCanvas text={s.id} size={90} />
                                           </div>
                                       </div>
                                   </div>
