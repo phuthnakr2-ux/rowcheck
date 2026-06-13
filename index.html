@@ -30,8 +30,8 @@
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     
-    /* PDF Report Layout */
-    #pdf-report-container { width: 794px; min-height: 1123px; padding: 35px 45px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
+    /* PDF Report Layout - ล็อคขนาด A4 (794x1123) แบบตายตัวสุดๆ */
+    #pdf-report-container { width: 794px; height: 1123px; padding: 35px 45px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; position: relative; }
     .pdf-table { width: 100%; border-collapse: collapse; margin-top: 15px; border: 1px solid #d8b4fe; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .pdf-table th, .pdf-table td { border: 1px solid #e9d5ff; vertical-align: middle; text-align: center; line-height: 1.5; padding-top: 8px !important; padding-bottom: 8px !important; }
     .pdf-table th { background: linear-gradient(135deg, #8b5cf6 0%, #c026d3 100%); color: white; font-weight: 700; font-size: 14px; letter-spacing: 0.5px; }
@@ -39,9 +39,9 @@
     .pdf-table tbody tr:nth-child(odd) { background-color: #ffffff; }
     .text-left-pdf { text-align: left !important; padding-left: 12px !important; font-weight: 600; color: #4c1d95; }
     
-    /* PDF Student ID Card Layout แนวนอน - หน้าละ 8 ใบ ขนาดบัตรมาตรฐาน 8.5x5.4 cm */
+    /* PDF Student ID Card Layout แนวนอน - หน้าละ 8 ใบ ขนาด A4 */
     .page-break { page-break-before: always; }
-    .pdf-page-chunk { width: 794px; min-height: 1123px; padding: 30px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; }
+    .pdf-page-chunk { width: 794px; height: 1123px; padding: 35px 30px; box-sizing: border-box; background-color: white; display: flex; flex-direction: column; overflow: hidden; position: relative; }
     
     .donut-chart { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.2s; }
     .donut-chart:hover { transform: scale(1.05); }
@@ -50,8 +50,9 @@
     #reader { width: 100%; border-radius: 16px; overflow: hidden; border: 3px solid #8b5cf6; }
     #reader video { object-fit: cover; }
 
+    /* ซ่อน Container ตอนปกติ โชว์ตอน Print ใต้ Loading */
     .print-layer-hidden { display: none; }
-    .print-layer-visible { display: block; position: absolute; top: 0; left: 0; z-index: 100; width: 100%; background: white; }
+    .print-layer-visible { display: block; position: absolute; top: 0; left: 0; z-index: 100; width: 794px; background: white; }
   </style>
 </head>
 <body>
@@ -204,6 +205,7 @@
           setSelectedForPrint(students.filter(s=>s.status!=='none' && s.status!=='moved').map(s => s.id));
       }, [students.length]);
 
+      // ดึงข้อมูลเช็คชื่อประจำวัน (ใช้แบบเริ่มต้นว่างเปล่า)
       useEffect(() => {
           const existRecord = records.find(r => r.date === currentDate);
           if (existRecord) {
@@ -212,11 +214,31 @@
               setTempNotes(existRecord.notes || {}); 
               setIsLocked(true); 
           } else {
-              const initialAtt = {};
-              students.forEach(s => { if (!s.status || s.status === 'active') initialAtt[s.id] = 'present'; });
-              setAttendance(initialAtt); setNotes({}); setTempNotes({}); setIsLocked(false); 
+              // โหลดร่างจากการเช็คค้างไว้ (Auto-save)
+              const draftStr = localStorage.getItem('rc_pro_draft_' + currentDate);
+              if (draftStr) {
+                  try {
+                      const draft = JSON.parse(draftStr);
+                      setAttendance(draft.attendance || {});
+                      setTempNotes(draft.notes || {});
+                  } catch(e) {
+                      setAttendance({}); setTempNotes({});
+                  }
+              } else {
+                  // ถ้าไม่มีร่าง เริ่มต้นเป็นค่าว่างทั้งหมด
+                  setAttendance({}); setTempNotes({});
+              }
+              setNotes({});
+              setIsLocked(false); 
           }
       }, [currentDate, students, records]);
+
+      // ระบบ Auto-save (เซฟร่างเมื่อมีการเปลี่ยนแปลง แต่ยังไม่กดล็อค)
+      useEffect(() => {
+          if (!isLocked) {
+              localStorage.setItem('rc_pro_draft_' + currentDate, JSON.stringify({ attendance, notes: tempNotes }));
+          }
+      }, [attendance, tempNotes, isLocked, currentDate]);
 
       const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -224,7 +246,15 @@
       useEffect(() => {
           if (checkMode === 'qr' && activeTab === 'check') startScanner();
           else stopScanner();
-          return () => stopScanner();
+          
+          return () => {
+              // ล้างข้อมูลอย่างปลอดภัยเวลา Component ถูกทำลาย
+              if (html5QrCodeRef.current && scannerActive) {
+                  html5QrCodeRef.current.stop().then(() => {
+                      html5QrCodeRef.current.clear();
+                  }).catch(e => console.log(e));
+              }
+          };
       }, [checkMode, activeTab]);
 
       const startScanner = () => {
@@ -245,7 +275,10 @@
 
       const stopScanner = () => {
           if (html5QrCodeRef.current && scannerActive) {
-              html5QrCodeRef.current.stop().then(() => setScannerActive(false)).catch(err => console.error(err));
+              html5QrCodeRef.current.stop().then(() => {
+                  html5QrCodeRef.current.clear();
+                  setScannerActive(false);
+              }).catch(err => console.error(err));
           }
       };
 
@@ -284,7 +317,21 @@
           setAttendance(newAtt);
       };
 
+      const sortedStudents = useMemo(() => [...students].sort((a,b)=>a.number-b.number), [students]);
+      
+      // การคำนวณสถานะเช็คชื่อ (เพื่อให้รู้ว่าเช็คครบหรือยัง)
+      const activeStudentsCount = sortedStudents.filter(s => !s.status || s.status === 'active').length;
+      const checkedStudentsCount = sortedStudents.filter(s => (!s.status || s.status === 'active') && attendance[s.id]).length;
+      const allChecked = checkedStudentsCount === activeStudentsCount;
+      const missingCount = activeStudentsCount - checkedStudentsCount;
+
       const saveAttendance = () => {
+          if (!allChecked) {
+              initAudio(); playSound('tap', settings.soundEnabled);
+              showToast(`กรุณาเช็คชื่อให้ครบทุกคน (ขาดอีก ${missingCount} คน)`);
+              return; // บังคับให้เช็คครบก่อนเซฟ
+          }
+
           initAudio(); playSound('success', settings.soundEnabled);
           const newRecord = { id: generateId(), date: currentDate, timestamp: new Date().toISOString(), data: attendance, notes: tempNotes };
           const filteredRecords = records.filter(r => r.date !== currentDate);
@@ -292,22 +339,22 @@
           setNotes(tempNotes); 
           setIsLocked(true); 
           syncDataToCloud('saveAttendance', newRecord);
+          localStorage.removeItem('rc_pro_draft_' + currentDate); // ล้างร่างทิ้งเมื่อเซฟสำเร็จ
           showToast('บันทึกและล็อคข้อมูลเรียบร้อย');
       };
 
       const unlockAttendance = () => { initAudio(); playSound('tap', settings.soundEnabled); setIsLocked(false); showToast('ปลดล็อคแล้ว สามารถแก้ไขได้'); };
 
       const currentSummary = useMemo(() => {
-          let p = 0, a = 0, e = 0, totalActive = 0;
-          students.forEach(s => {
+          let p = 0, a = 0, e = 0;
+          sortedStudents.forEach(s => {
               if (!s.status || s.status === 'active') {
-                  totalActive++;
-                  const st = attendance[s.id] || 'present';
+                  const st = attendance[s.id];
                   if(st==='present') p++; else if(st==='absent') a++; else if(st==='excused') e++;
               }
           });
-          return { total: totalActive, p, a, e };
-      }, [attendance, students]);
+          return { total: activeStudentsCount, p, a, e, checked: checkedStudentsCount };
+      }, [attendance, sortedStudents]);
 
       // --- Stats & Report Functions ---
       const handleQuickDate = (mode) => {
@@ -326,8 +373,6 @@
       };
 
       const reportDateList = useMemo(() => getDatesBetween(reportStartDate, reportEndDate), [reportStartDate, reportEndDate]);
-      
-      const sortedStudents = useMemo(() => [...students].sort((a,b)=>a.number-b.number), [students]);
       
       const filteredCheckStudents = useMemo(() => {
           if (!searchQuery.trim()) return sortedStudents;
@@ -349,7 +394,7 @@
       }, [sortedStudents, reportSearchQuery]);
 
       const getAttendanceForDate = (date) => {
-          if (date === currentDate) return attendance;
+          if (date === currentDate && isLocked) return attendance; // ดึงข้อมูลปัจจุบันแค่ตอนล็อคแล้วเท่านั้น
           const rec = records.find(r => r.date === date);
           return rec ? rec.data : null;
       };
@@ -393,7 +438,7 @@
           });
           const total = p + a + e;
           return { p, a, e, total };
-      }, [reportDateList, records, students, attendance, currentDate]);
+      }, [reportDateList, records, students, attendance, currentDate, isLocked]);
 
       const getDonutStyle = () => {
           const total = reportSummary.total;
@@ -435,7 +480,6 @@
               img.onload = () => {
                   const canvas = document.createElement('canvas'); 
                   const ctx = canvas.getContext('2d');
-                  // ปรับความคมชัดภาพให้สูงขึ้น (จาก 150 เป็น 300) ภาพจะไม่เบลอเวลาปริ้นต์
                   const MAX_SIZE = 300; 
                   let width = img.width; 
                   let height = img.height;
@@ -446,7 +490,6 @@
                   canvas.width = width; canvas.height = height; 
                   ctx.drawImage(img, 0, 0, width, height);
                   
-                  // ปรับคุณภาพเป็น 80% ให้ภาพใสและคมชัดขึ้น
                   const base64Data = canvas.toDataURL('image/jpeg', 0.8); 
                   
                   setStudents(prev => {
@@ -569,7 +612,7 @@
       };
       
       const cardsToPrint = sortedStudents.filter(s => selectedForPrint.includes(s.id));
-      const cardChunks = chunkArray(cardsToPrint, 8); // แบ่งหน้าละ 8 ใบ พอดีๆกับขนาดบัตรมาตรฐาน
+      const cardChunks = chunkArray(cardsToPrint, 8); 
 
       const executeExport = async (type) => {
           initAudio(); playSound('tap', settings.soundEnabled); 
@@ -578,14 +621,15 @@
           window.scrollTo(0, 0); 
           
           try {
-              // ให้เวลา DOM แสดงขึ้นมาใต้ Loading Screen ก่อนจะแคปจอ
               setTimeout(async () => {
+                  const commonHtml2CanvasOpt = { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, windowWidth: 794 };
+                  
                   if (type === 'pdf_qr_selected') {
                       const element = document.getElementById('pdf-qr-container');
                       const opt = { 
                           margin: 0, filename: `บัตรนักเรียน_${settings.roomName}.pdf`, 
-                          image: { type: 'jpeg', quality: 0.98 }, 
-                          html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 }, 
+                          image: { type: 'jpeg', quality: 1 }, 
+                          html2canvas: commonHtml2CanvasOpt, 
                           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                           pagebreak: { mode: 'css', before: '.page-break' } 
                       };
@@ -593,9 +637,8 @@
                       showToast('โหลด PDF บัตรนักเรียน สำเร็จ');
                   } 
                   else if (type === 'pdf_single_qr') {
-                      // ชี้เป้าไปที่กล่อง Export ลับ ที่ล็อคพิกเซลและ CSS ไว้เป๊ะๆ แล้ว
                       const element = document.getElementById('single-qr-card-content-export');
-                      const canvas = await window.html2canvas(element, { scale: 3, useCORS: true, backgroundColor: '#ffffff', scrollY: 0 });
+                      const canvas = await window.html2canvas(element, { scale: 3, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, windowWidth: 340 });
                       const link = document.createElement('a'); link.download = `บัตรนักเรียน_${selectedQRStudent.name}.png`;
                       link.href = canvas.toDataURL('image/png'); link.click();
                       showToast('บันทึกรูปบัตรนักเรียนสำเร็จ');
@@ -605,15 +648,15 @@
                       if (type === 'pdf') {
                           const opt = { 
                               margin: 0, filename: `รายงานเข้าแถว_${settings.roomName}.pdf`, 
-                              image: { type: 'jpeg', quality: 0.98 }, 
-                              html2canvas: { scale: 2, useCORS: true, letterRendering: true, width: 794, scrollY: 0 }, 
+                              image: { type: 'jpeg', quality: 1 }, 
+                              html2canvas: commonHtml2CanvasOpt, 
                               jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
                           };
                           await window.html2pdf().set(opt).from(element).save();
                           showToast('โหลด PDF สำเร็จ');
                       } 
                       else if (type === 'image') {
-                          const canvas = await window.html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: 794, scrollY: 0 });
+                          const canvas = await window.html2canvas(element, commonHtml2CanvasOpt);
                           const link = document.createElement('a'); link.download = `รายงานเข้าแถว_${settings.roomName}.png`;
                           link.href = canvas.toDataURL('image/png'); link.click();
                           showToast('บันทึกรูปภาพสำเร็จ');
@@ -632,7 +675,7 @@
                <div className="absolute top-[20%] right-[-10%] w-[300px] h-[300px] bg-violet-400 rounded-full mix-blend-multiply filter blur-[80px] opacity-20 animate-blob animation-delay-2000"></div>
            </div>
 
-           {/* Modal โหลดเอกสาร - z-index สูงสุด */}
+           {/* Modal โหลดเอกสาร */}
            {isGeneratingDoc && (
             <div className="fixed inset-0 z-[99999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center">
               <i className="fas fa-spinner fa-spin text-violet-400 text-6xl mb-4 drop-shadow-[0_0_15px_rgba(167,139,250,0.5)]"></i>
@@ -643,23 +686,18 @@
            {/* Modal ดูบัตรเดี่ยวแนวนอน (ส่วนที่แสดงให้ผู้ใช้เห็น) */}
            {selectedQRStudent && (
             <div className="fixed inset-0 z-[99000] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
-                
-                {/* เลย์เอาต์บัตรเดี่ยวสำหรับโชว์ในจอเท่านั้น */}
                 <div className="w-[340px] h-[216px] border border-slate-300 rounded-xl flex overflow-hidden bg-white shadow-2xl shrink-0 relative">
                     <div className="w-[35%] bg-slate-50 border-r border-slate-200 flex flex-col items-center p-2 relative">
-                        
                         <div className="w-[85px] h-[110px] bg-white border border-slate-300 rounded-md overflow-hidden flex items-center justify-center shadow-sm mt-3">
                             {selectedQRStudent.image ? 
-                                <div style={{ backgroundImage: `url(${selectedQRStudent.image})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', width: '100%', height: '100%' }}></div> 
+                                <img src={selectedQRStudent.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} crossOrigin="anonymous" />
                                 : <i className="fas fa-user" style={{ color: '#cbd5e1', fontSize: '36px' }}></i>
                             }
                         </div>
-                        
                         <div className="bg-violet-600 text-white text-[12px] font-bold text-center py-1.5 absolute bottom-0 left-0 w-full">
                             เลขที่ {selectedQRStudent.number}
                         </div>
                     </div>
-                    
                     <div className="w-[65%] p-4 flex flex-col justify-between box-border">
                         <div>
                             <h3 className="font-bold text-slate-800 text-[16px] leading-tight mb-1 truncate">
@@ -672,11 +710,8 @@
                             <QRCodeCanvas text={selectedQRStudent.id} size={70} />
                         </div>
                     </div>
-                    
-                    {/* ปุ่มปิด Modal */}
                     <button onClick={() => setSelectedQRStudent(null)} className="absolute top-2 right-2 w-7 h-7 bg-slate-100/80 hover:bg-slate-200 text-slate-600 rounded-full flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
                 </div>
-
                 <button onClick={() => executeExport('pdf_single_qr')} className="mt-6 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
                     <i className="fas fa-download mr-2"></i> บันทึกบัตรแนวนอน
                 </button>
@@ -738,9 +773,8 @@
 
            <main className="max-w-3xl mx-auto px-4 py-6 relative z-10">
 
-              {/* ----------------- TAB 1: เช็คชื่อ ----------------- */}
-              {activeTab === 'check' && (
-                 <div className="animate-in fade-in space-y-4">
+              {/* ----------------- TAB 1: เช็คชื่อ (เปลี่ยนเป็นใช้ Display: none แทนลบ DOM เพื่อแก้ปัญหาหน้าขาว) ----------------- */}
+              <div className={activeTab === 'check' ? "animate-in fade-in space-y-4" : "hidden"}>
                     
                     <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
                         <button onClick={() => {initAudio(); playSound('tap', settings.soundEnabled); setCheckMode('manual');}} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${checkMode === 'manual' ? 'bg-white text-violet-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -762,7 +796,7 @@
                             </div>
                             {lastScanned && (
                                 <div className="mt-4 bg-emerald-50 text-emerald-700 px-6 py-2 rounded-full font-bold border border-emerald-200 animate-in zoom-in">
-                                    <i className="fas fa-check-circle mr-1"></i> {lastScanned.name} มาเรียน
+                                    <i className="fas fa-check-circle mr-1"></i> {lastScanned.name} เช็คชื่อแล้ว
                                 </div>
                             )}
                         </div>
@@ -774,7 +808,9 @@
                                 <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
                                     <i className="fas fa-calendar-day text-violet-500"></i> เช็คชื่อประจำวัน
                                 </h2>
-                                <p className="text-xs text-slate-500 font-medium">รวมนักเรียน (ปกติ) {currentSummary.total} คน</p>
+                                <p className="text-xs text-slate-500 font-medium">
+                                    เช็คแล้ว: <span className={allChecked ? "text-emerald-500 font-bold" : "text-orange-500 font-bold"}>{currentSummary.checked} / {currentSummary.total}</span> คน
+                                </p>
                             </div>
                             <input type="date" value={currentDate} onChange={e=>{initAudio(); playSound('tap', settings.soundEnabled); setCurrentDate(e.target.value);}} className="text-sm px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 font-bold text-violet-700 outline-none focus:border-violet-500 shadow-inner" />
                         </div>
@@ -794,7 +830,7 @@
                                     <i className="fas fa-lock mr-1 text-slate-300"></i> บันทึกแล้ว (กดปลดล็อค)
                                 </button>
                             ) : (
-                                <button onClick={saveAttendance} className="flex-[1.5] py-3 text-sm font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl shadow-lg shadow-violet-200 active:scale-95 transition-all">
+                                <button onClick={saveAttendance} className={`flex-[1.5] py-3 text-sm font-bold rounded-xl shadow-lg active:scale-95 transition-all ${allChecked ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-violet-200' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>
                                     <i className="fas fa-save mr-1"></i> บันทึกและล็อค
                                 </button>
                             )}
@@ -822,7 +858,7 @@
                         ) : (
                             filteredCheckStudents.map(student => {
                                 const isActive = (!student.status || student.status === 'active');
-                                const status = attendance[student.id] || 'present';
+                                const status = attendance[student.id]; // เป็น undefined ได้ถ้ายังไม่เช็ค
                                 const studentNote = tempNotes[student.id] || '';
                                 
                                 return (
@@ -846,7 +882,8 @@
 
                                                 <div className="flex-1 min-w-0 flex flex-col justify-center min-h-[3.5rem]">
                                                     <p className={`font-bold text-sm sm:text-base leading-tight truncate ${isActive ? (isLocked ? 'text-slate-600' : 'text-slate-800') : 'text-slate-400 line-through'}`}>
-                                                        {student.name} {isActive ? '' : <span className="text-[10px] font-normal inline sm:hidden">({student.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน'})</span>}
+                                                        {student.name} 
+                                                        {isActive && !status && <span className="ml-2 text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">ยังไม่เช็ค</span>}
                                                     </p>
                                                     {!isActive && <p className="text-[10px] font-normal text-slate-400 hidden sm:block">({student.status === 'moved' ? 'ย้าย' : 'ไม่มีตัวตน'})</p>}
                                                     
@@ -866,9 +903,9 @@
 
                                             {isActive ? (
                                                 <div className={`flex shrink-0 p-1 rounded-xl border shadow-inner mt-2 sm:mt-0 ${isLocked ? 'bg-slate-100 border-slate-200 opacity-80' : 'bg-slate-50 border-slate-200'}`}>
-                                                    <button onClick={() => setStatusDirectly(student.id, 'present')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'present' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='present' ? 'opacity-50' : ''}`}>มา</button>
-                                                    <button onClick={() => setStatusDirectly(student.id, 'absent')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'absent' ? 'bg-red-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='absent' ? 'opacity-50' : ''}`}>ขาด</button>
-                                                    <button onClick={() => setStatusDirectly(student.id, 'excused')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'excused' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${isLocked && status!=='excused' ? 'opacity-50' : ''}`}>ลา</button>
+                                                    <button onClick={() => setStatusDirectly(student.id, 'present')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'present' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:bg-slate-200'} ${isLocked && status!=='present' ? 'opacity-50' : ''}`}>มา</button>
+                                                    <button onClick={() => setStatusDirectly(student.id, 'absent')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'absent' ? 'bg-red-500 text-white shadow-md' : 'text-slate-400 hover:bg-slate-200'} ${isLocked && status!=='absent' ? 'opacity-50' : ''}`}>ขาด</button>
+                                                    <button onClick={() => setStatusDirectly(student.id, 'excused')} disabled={isLocked} className={`flex-1 sm:flex-none px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all ${status === 'excused' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-400 hover:bg-slate-200'} ${isLocked && status!=='excused' ? 'opacity-50' : ''}`}>ลา</button>
                                                 </div>
                                             ) : (
                                                 <div className="text-xs font-bold text-slate-400 bg-slate-100 px-4 py-2 rounded-lg text-center border border-slate-200 shrink-0 mt-2 sm:mt-0">ข้ามการเช็คชื่อ</div>
@@ -879,12 +916,10 @@
                             })
                         )}
                     </div>
-                 </div>
-              )}
+              </div>
 
               {/* ----------------- TAB 2: สถิติ/พิมพ์ ----------------- */}
-              {activeTab === 'report' && (
-                 <div className="animate-in fade-in space-y-4">
+              <div className={activeTab === 'report' ? "animate-in fade-in space-y-4" : "hidden"}>
                     <div className="bg-white/90 backdrop-blur-sm rounded-[2rem] p-6 shadow-lg shadow-violet-100/50 border border-white">
                         <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2 border-b border-violet-100 pb-4">
                             <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center"><i className="fas fa-chart-pie"></i></div> 
@@ -995,12 +1030,10 @@
                             </div>
                         </div>
                     </div>
-                 </div>
-              )}
+              </div>
 
               {/* ----------------- TAB 3: ตั้งค่า ----------------- */}
-              {activeTab === 'settings' && (
-                 <div className="animate-in fade-in space-y-4 pb-8">
+              <div className={activeTab === 'settings' ? "animate-in fade-in space-y-4 pb-8" : "hidden"}>
                     
                     <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
                         <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center"><i className="fas fa-cog"></i></div> ตั้งค่าระบบ</h2>
@@ -1106,7 +1139,7 @@
                                                 <div className="relative shrink-0">
                                                     <div className={`w-10 h-12 rounded-xl flex items-center justify-center border-2 border-slate-200 shadow-sm overflow-hidden ${s.image ? '' : 'bg-slate-50 border-dashed'}`}>
                                                         {s.image ? (
-                                                            <div style={{ backgroundImage: `url(${s.image})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', width: '100%', height: '100%' }}></div>
+                                                            <img src={s.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} crossOrigin="anonymous" />
                                                         ) : (
                                                             <i className="fas fa-user text-sm text-slate-300"></i>
                                                         )}
@@ -1154,8 +1187,7 @@
                             )})}
                         </div>
                     </div>
-                 </div>
-              )}
+              </div>
 
            </main>
 
@@ -1262,7 +1294,7 @@
                     </div>
                </div>
                
-               {/* 2. แคป PDF บัตรนักเรียนแนวนอนรวม (หน้าละ 8 ใบ) */}
+               {/* 2. แคป PDF บัตรนักเรียนแนวนอนรวม (หน้าละ 8 ใบ) ขยายใหญ่ขึ้นให้เต็ม A4 ซ้ายขวา */}
                <div id="pdf-qr-container" className="font-sarabun text-slate-800" style={{ backgroundColor: 'white' }}>
                     {cardChunks.map((chunk, chunkIndex) => (
                         <div key={chunkIndex} className={`pdf-page-chunk ${chunkIndex > 0 ? 'page-break' : ''}`}>
@@ -1271,31 +1303,30 @@
                                 <h2 className="text-[16px] text-violet-700">ชั้นมัธยมศึกษาปีที่ {formattedRoomName}</h2>
                             </div>
                             
-                            <div className="flex-1 content-start" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                            <div className="flex-1 content-start" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 350px)', justifyContent: 'center', gap: '20px 24px' }}>
                                 {chunk.map(s => (
-                                    <div key={s.id} style={{ width: '335px', height: '210px', backgroundColor: 'white', border: '2px solid #cbd5e1', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
-                                        <div style={{ position: 'absolute', top: 0, left: 0, width: '120px', height: '100%', backgroundColor: '#f8fafc', borderRight: '2px solid #e2e8f0' }}>
-                                            <div style={{ position: 'absolute', top: '15px', left: '17px', width: '85px', height: '110px', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', overflow: 'hidden' }}>
+                                    <div key={s.id} style={{ width: '350px', height: '220px', backgroundColor: 'white', border: '2px solid #cbd5e1', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+                                        <div style={{ position: 'absolute', top: 0, left: 0, width: '125px', height: '100%', backgroundColor: '#f8fafc', borderRight: '2px solid #e2e8f0' }}>
+                                            <div style={{ position: 'absolute', top: '20px', left: '17px', width: '90px', height: '115px', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', overflow: 'hidden' }}>
                                                 {s.image ? 
-                                                    <div style={{ backgroundImage: `url(${s.image})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', width: '100%', height: '100%' }}></div> 
+                                                    <img src={s.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} crossOrigin="anonymous" />
                                                     : <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center'}}><i className="fas fa-user" style={{ color: '#cbd5e1', fontSize: '36px' }}></i></div>
                                                 }
                                             </div>
-                                            <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', backgroundColor: '#7c3aed', color: 'white', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', padding: '6px 0' }}>
+                                            <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', backgroundColor: '#7c3aed', color: 'white', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', padding: '8px 0' }}>
                                                 เลขที่ {s.number}
                                             </div>
                                         </div>
-                                        <div style={{ position: 'absolute', top: 0, left: '120px', width: '215px', height: '100%', padding: '16px', boxSizing: 'border-box' }}>
+                                        <div style={{ position: 'absolute', top: 0, left: '125px', width: '225px', height: '100%', padding: '16px', boxSizing: 'border-box' }}>
                                             <div style={{ paddingBottom: '10px' }}>
-                                                {/* ใช้ความสูงจำกัดแทน line-clamp เพื่อแก้ปัญหาข้อความแหว่งตอนแคปหน้าจอ */}
-                                                <div style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '15px', lineHeight: '1.4', maxHeight: '42px', overflow: 'hidden', wordWrap: 'break-word', marginBottom: '4px' }}>
+                                                <div style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '16px', lineHeight: '1.6', maxHeight: '50px', overflow: 'hidden', wordWrap: 'break-word', marginBottom: '4px', paddingBottom: '4px' }}>
                                                     {s.name}
                                                 </div>
                                                 <div style={{ color: '#64748b', fontWeight: 'bold', fontSize: '12px', lineHeight: '1.4' }}>รหัส: {s.id}</div>
                                                 <div style={{ color: '#7c3aed', fontWeight: 'bold', fontSize: '12px', lineHeight: '1.4' }}>ห้อง: {settings.roomName}</div>
                                             </div>
                                             <div style={{ position: 'absolute', bottom: '16px', right: '16px', border: '2px solid #e2e8f0', padding: '6px', borderRadius: '8px', backgroundColor: 'white' }}>
-                                                <QRCodeCanvas text={s.id} size={70} />
+                                                <QRCodeCanvas text={s.id} size={75} />
                                             </div>
                                         </div>
                                     </div>
@@ -1308,21 +1339,21 @@
                {/* 3. แคปรูป บัตรเดี่ยวแยก (สไตล์เก่าแบบ Absolute ตายตัว ถึกทนสุดๆ ปลั๊กอินแคปไม่พลาด) */}
                {selectedQRStudent && (
                <div id="single-qr-card-content-export" style={{ width: '340px', height: '216px', backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', border: '1px solid #cbd5e1', position: 'relative', fontFamily: "'Sarabun', sans-serif" }}>
-                    <div style={{ position: 'absolute', top: 0, left: 0, width: '120px', height: '100%', backgroundColor: '#f8fafc', borderRight: '1px solid #e2e8f0' }}>
-                        <div style={{ position: 'absolute', top: '15px', left: '17px', width: '85px', height: '110px', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '120px', height: '216px', backgroundColor: '#f8fafc', borderRight: '1px solid #e2e8f0' }}>
+                        <div style={{ position: 'absolute', top: '16px', left: '17px', width: '85px', height: '110px', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', overflow: 'hidden' }}>
                             {selectedQRStudent.image ? 
-                                <div style={{ backgroundImage: `url(${selectedQRStudent.image})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', width: '100%', height: '100%' }}></div> 
+                                <img src={selectedQRStudent.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} crossOrigin="anonymous" />
                                 : <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center'}}><i className="fas fa-user" style={{ color: '#cbd5e1', fontSize: '36px' }}></i></div>
                             }
                         </div>
-                        <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', backgroundColor: '#7c3aed', color: 'white', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', padding: '6px 0' }}>
+                        <div style={{ position: 'absolute', bottom: 0, left: 0, width: '120px', backgroundColor: '#7c3aed', color: 'white', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', padding: '8px 0' }}>
                             เลขที่ {selectedQRStudent.number}
                         </div>
                     </div>
                     
-                    <div style={{ position: 'absolute', top: 0, left: '120px', width: '220px', height: '100%', padding: '16px', boxSizing: 'border-box' }}>
-                        <div style={{ paddingTop: '4px' }}>
-                            <div style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '16px', lineHeight: '1.4', maxHeight: '45px', overflow: 'hidden', wordWrap: 'break-word', marginBottom: '6px' }}>
+                    <div style={{ position: 'absolute', top: 0, left: '120px', width: '220px', height: '216px', padding: '20px 16px', boxSizing: 'border-box' }}>
+                        <div style={{ paddingTop: '0px' }}>
+                            <div style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '16px', lineHeight: '1.6', marginBottom: '8px', wordWrap: 'break-word', paddingBottom: '4px' }}>
                                 {selectedQRStudent.name}
                             </div>
                             <div style={{ color: '#64748b', fontWeight: 'bold', fontSize: '12px', lineHeight: '1.5' }}>รหัส: {selectedQRStudent.id}</div>
